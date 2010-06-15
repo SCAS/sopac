@@ -351,7 +351,6 @@ function sopac_user_holds_form_validate(&$form, &$form_state) {
   foreach ($holds as $hold) {
     $holds_by_bnum[$hold['bnum']] = $hold;
   }
-
   $submitted_holds = $form_state['values']['holds'];
 
   $change_pickup = variable_get('sopac_changeable_pickup_location', FALSE);
@@ -365,7 +364,7 @@ function sopac_user_holds_form_validate(&$form, &$form_state) {
 
   foreach ($submitted_holds as $bnum => $hold_data) {
     if ($hold_data['cancel']) {
-      $cancellations[$bnum] = $cancel_requested;
+      $cancellations[$bnum] = TRUE;
       $update_holds = TRUE;
       continue;
     }

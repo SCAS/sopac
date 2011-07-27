@@ -84,6 +84,10 @@ if (sopac_prev_search_url(TRUE)) {
       $cover_img = '<img class="item-cover" width="200" src="' . $cover_img . '">';
     }
     print $cover_img;
+    preg_match('#\bhttps?://[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/))#', $cover_img, $match);
+    $full_cover_image_url = $match[0] ? $match[0] : 'http://' . $_SERVER['SERVER_NAME'] . '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png';
+    
+    print '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png'
     ?>
 
     <!-- Ratings -->
@@ -94,6 +98,37 @@ if (sopac_prev_search_url(TRUE)) {
       print '</div>';
     }
     ?>
+    
+    <!-- Social Media -->
+
+    <?php $thispage = 'http://' . $_SERVER['SERVER_NAME'] . $_SERVER['REQUEST_URI']; ?>
+
+    <?php drupal_set_html_head('<meta property="og:title" content="' . ucwords($item['title']) . '"/>'); ?>
+    <?php drupal_set_html_head('<meta property="og:type" content="book"/>'); ?>
+    <?php drupal_set_html_head('<meta property="og:image" content="' . $full_cover_image_url . '"/>'); ?>
+    <?php drupal_set_html_head('<meta property="og:url" content="' . $thispage . '"/>'); ?>
+    <?php drupal_set_html_head('<meta property="fb:app_id" content="239889349362973"/>'); ?>
+    <?php
+    if ($item['author']) {
+      drupal_set_html_head('<meta property="og:description" content="by ' . $new_author_str . '"/>');
+    }
+    ?>
+
+    <ul><li>       
+
+    <?php $tweettitle = $new_author_str ? ucwords($item['title']) . ' by ' . $new_author_str : ucwords($item['title']); ?>
+    <script src="http://platform.twitter.com/widgets.js" type="text/javascript"></script>
+    <div>
+       <a href="http://twitter.com/share" class="twitter-share-button"
+          data-url="<?php print $thispage; ?>"
+          data-via="darienlibrary"
+          data-text="<?php print $tweettitle; ?>"
+          data-related="darienlibrary:Darien Library">Tweet</a>
+    </div>
+
+    <div id="fb-root"></div><script src="http://connect.facebook.net/en_US/all.js#appId=239889349362973&amp;xfbml=1"></script><fb:like hr
+ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" width="450" show_faces="true" font="verdana"></fb:like>
+    </li></ul>
 
     <!-- Item Details -->
     <ul>

@@ -109,7 +109,9 @@ if (sopac_prev_search_url(TRUE)) {
     <?php drupal_set_html_head('<meta property="og:url" content="' . $thispage . '"/>'); ?>
     <?php drupal_set_html_head('<meta property="fb:app_id" content="239889349362973"/>'); ?>
     <?php
+    $soc_med_page_desc = ucwords($item['title']);
     if ($item['author']) {
+      $soc_med_page_desc .= ' by ' . $new_author_str;
       drupal_set_html_head('<meta property="og:description" content="by ' . $new_author_str . '"/>');
     }
     ?>
@@ -128,6 +130,10 @@ if (sopac_prev_search_url(TRUE)) {
 
     <div id="fb-root"></div><script src="http://connect.facebook.net/en_US/all.js#appId=239889349362973&amp;xfbml=1"></script><fb:like hr
 ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" width="450" show_faces="true" font="verdana"></fb:like>
+
+    <div style="padding-top:3px;"><a href="http://pinterest.com/pin/create/button/?url=<?php print urlencode($thispage); ?>&media=<?php print urlencode($full_cover_image_url); ?>&description=<?php print urlencode($soc_med_page_desc); ?>" class="pin-it-button" count-layout="horizontal">Pin It</a>
+    <script type="text/javascript" src="http://assets.pinterest.com/js/pinit.js"></script></div>
+
     </li></ul>
 
     <!-- Item Details -->

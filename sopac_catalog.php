@@ -613,6 +613,7 @@ function sopac_search_form_basic() {
     '#default_value' => $search_args,
     '#size' => 25,
     '#maxlength' => 255,
+    '#attributes' => array('x-webkit-speech' => 'true'),
   );
   $form['basic']['inline']['search_type'] = array(
     '#type' => 'select',

@@ -41,7 +41,7 @@ $default_perpage = variable_get('sopac_results_per_page', 10);
 <?php } ?>
 
   <div class="hitlist-range">
-    <span class="range">Showing results <strong><?php print $result_info['hit_lowest'] . '</strong> to <strong>' . $result_info['hit_highest'] . '</strong> of <strong>' . $result_info['num_results'] .'</strong>'; ?></span>
+    <span class="range">Results <strong><?php print $result_info['hit_lowest'] . '</strong> to <strong>' . $result_info['hit_highest'] . '</strong> of <strong>' . $result_info['num_results'] .'</strong>'; ?></span>
     <span class="pagination">Show:
       <?php
         if ($perpage == $default_perpage || !$perpage) {

@@ -77,8 +77,7 @@ if (sopac_prev_search_url(TRUE)) {
     if (!module_exists('covercache')) {
       if (strpos($item['cover_img'], 'http://') !== FALSE) {
         $cover_img = $item['cover_img'];
-      }
-      else {
+      } else {
         $cover_img = base_path() . drupal_get_path('module', 'sopac') . '/images/nocover.png';
       }
       $cover_img = '<img class="item-cover" width="200" src="' . $cover_img . '">';

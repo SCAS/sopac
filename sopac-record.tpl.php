@@ -4,7 +4,45 @@
  */
 
 // Set the page title
-drupal_set_title(ucwords($item['title']));
+global $user;
+drupal_set_title(title_case($item['title'] . ' ' .$item['title_medium']));
+drupal_set_html_head('<link rel="canonical" href="http://www.aadl.org/catalog/record/'.$item['_id'].'" />');
+drupal_set_html_head('<meta property="og:image" content="'.$cover_url.'" />');
+drupal_set_html_head('<meta property="og:title" content="'.title_case($item['title'] . ' ' .$item['title_medium']).'" />');
+// hard coding url for now. don't want to have tests pick up other installs
+drupal_set_html_head('<meta property="og:url" content="http://www.aadl.org/catalog/record/'.$item['_id'].'" />');
+$books = $locum->csv_parser($locum_config['format_groups']['books']);
+$video = $locum->csv_parser($locum_config['format_groups']['video']);
+$music = $locum->csv_parser($locum_config['format_groups']['music']);
+if(in_array($item['mat_code'],$books)){
+  drupal_set_html_head('<meta property="og:type" content="book" />');
+}
+else if(in_array($item['mat_code'],$music)){
+  drupal_set_html_head('<meta property="og:type" content="album" />');
+}
+else if(in_array($item['mat_code'],$video)){
+  if(stristr('DVD TV',$item['callnum'])) {
+    drupal_set_html_head('<meta property="og:type" content="tv_show" />');
+  }
+  else {
+    drupal_set_html_head('<meta property="og:type" content="movie" />');
+  }
+}
+else {
+  drupal_set_html_head('<meta property="og:type" content="product" />');
+}
+$useriplabels = ipmap_labels();
+if($item['trailers']){
+  if($item['trailers'][0]['type'] == 'trailer'){
+    $trailer_url = $item['trailers'][0]['url'];
+    if($item['trailers'][0]['image']){
+      $trailer_image = $item['trailers'][0]['image'];
+    }
+    if($item['trailers'][0]['cached'] && in_array('internal',$useriplabels)){
+      $trailer_url = 'http://media.aadl.org/trailers/'.$item['bnum'].'.mp4';
+    }
+  }
+}
 
 // Set up some variables.
 $url_prefix = variable_get('sopac_url_prefix', 'cat/seek');
@@ -12,44 +50,35 @@ $new_author_str = sopac_author_format($item['author'], $item['addl_author']);
 $dl_mat_codes = in_array($item['mat_code'], $locum->csv_parser($locum_config['format_special']['download']));
 $no_avail_mat_codes = in_array($item['mat_code'], $locum->csv_parser($locum_config['format_special']['skip_avail']));
 $location_label = $item['loc_code'] || ($item['loc_code'] != 'none') ? $locum_config['locations'][$item['loc_code']] : '';
-$note_arr = unserialize($item['notes']);
+$note_arr = $item['notes'];
 
-$series = trim($item['series']);
-if ($split_pos = max(strpos($series, ";"), strpos($series, ":"), strpos($series, "."), 0)) {
-  $series = trim(substr($series, 0, $split_pos));
-}
+// Get Zoom Lends copies
+$zooms_avail = $item_status['callnums']['Zoom Lends DVD']['avail'] + $item_status['callnums']['Zoom Lends Book']['avail'];
+$avail = $item_status['avail'] - $zooms_avail;
 
-// Construct the availabilty summary.
-if ($item_status['avail'] == 0 && $item_status['holds'] > 0) {
-  $class = "holds";
-  $reqtext = "There are no copies available. " . $item_status['holds'] . " request" .
-  ($item_status['holds'] == 1 ? '' : 's') . " on " . $item_status['total'] . ($item_status['total'] == 1 ? ' copy' : ' copies') . '.';
-}
-elseif ($item_status['avail'] == 0) {
-  $class = "first";
-  $reqtext = "There are no copies available.";
-}
-elseif($item_status['holds'] > 0) {
-  $class = "holds";
-  $reqtext = "There " . ($item_status['avail'] == 1 ? 'is' : 'are') . " currently $item_status[avail] available and " . $item_status['holds'] . " request" . ($item_status['holds'] == 1 ? '' : 's') . " on " . $item_status['total'] . ' ' . ($item_status['total'] == 1 ? 'copy' : 'copies');
+if ($avail > 0) {
+  $reqtext = 'There ' . ($avail == 1 ? 'is' : 'are') . " currently $avail available";
 }
 else {
-  $class = "avail";
-  $reqtext = "There " . ($item_status['avail'] == 1 ? 'is' : 'are') . " currently $item_status[avail] available.";
+  $reqtext = 'There are no copies available';
+}
+if ($zooms_avail > 0) {
+  //$zoom_link = l('Zoom Lends', 'catalog/browse/unusual#ZOOM', array('query' => array('lightbox' => 1), 'attributes' => array('rel' => 'lightframe')));
+  $zoom_link = 'Zoom Lends';
+  $reqtext .= " ($zooms_avail $zoom_link available)";
+}
+if ($item_status['holds'] > 0) {
+  $reqtext .= ' and ' . $item_status['holds'] . ' request' . ($item_status['holds'] == 1 ? '' : 's') . " on " . $item_status['total'] . ' ' . ($item_status['total'] == 1 ? 'copy' : 'copies');
 }
 
 // Build the item availability array
 if (count($item_status['items'])) {
   foreach ($item_status['items'] as $copy_status) {
     if ($copy_status['avail'] > 0) {
-      $copy_tag = ($copy_status['avail'] == 1) ? t('copy available') : t('copies available');
-      $status_msg = $copy_status['avail'] . ' ' . $copy_tag;
-    }
-    elseif ($copy_status['due']) {
-      $status_msg = t('Next copy due') . ' ' . date('n-j-Y', $copy_status['due']);
+      $status_msg = 'Available';
     }
     else {
-      $status_msg = $copy_status['statusmsg'];
+      $status_msg = ucwords(strtolower($copy_status['statusmsg']));
     }
     if (variable_get('sopac_multi_branch_enable', 0)) {
       $copy_status_array[] = array($copy_status['location'], $copy_status['callnum'], $locum_config['branches'][$copy_status['branch']], $status_msg);
@@ -60,10 +89,11 @@ if (count($item_status['items'])) {
   }
 }
 
-if (sopac_prev_search_url(TRUE)) {
-  print '<p>' . l("&#171; Return to your search", sopac_prev_search_url(), array('html' => TRUE)) . '</p>';
+function linkfromcallnum($callnum)
+{
+    $url_prefix = variable_get('sopac_url_prefix', 'cat/seek');
+    return l($callnum, $url_prefix . '/search/callnum/"' . urlencode($callnum) .'"',array('alias' => TRUE));
 }
-
 ?>
 
 <!-- begin item record -->
@@ -77,16 +107,13 @@ if (sopac_prev_search_url(TRUE)) {
     if (!module_exists('covercache')) {
       if (strpos($item['cover_img'], 'http://') !== FALSE) {
         $cover_img = $item['cover_img'];
-      } else {
+      }
+      else {
         $cover_img = base_path() . drupal_get_path('module', 'sopac') . '/images/nocover.png';
       }
       $cover_img = '<img class="item-cover" width="200" src="' . $cover_img . '">';
     }
     print $cover_img;
-    preg_match('#\bhttps?://[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/))#', $cover_img, $match);
-    $full_cover_image_url = $match[0] ? $match[0] : 'http://' . $_SERVER['SERVER_NAME'] . '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png';
-    
-    print '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png'
     ?>
 
     <!-- Ratings -->
@@ -97,43 +124,6 @@ if (sopac_prev_search_url(TRUE)) {
       print '</div>';
     }
     ?>
-    
-    <!-- Social Media -->
-
-    <?php $thispage = 'http://' . $_SERVER['SERVER_NAME'] . $_SERVER['REQUEST_URI']; ?>
-
-    <?php drupal_set_html_head('<meta property="og:title" content="' . ucwords($item['title']) . '"/>'); ?>
-    <?php drupal_set_html_head('<meta property="og:type" content="book"/>'); ?>
-    <?php drupal_set_html_head('<meta property="og:image" content="' . $full_cover_image_url . '"/>'); ?>
-    <?php drupal_set_html_head('<meta property="og:url" content="' . $thispage . '"/>'); ?>
-    <?php drupal_set_html_head('<meta property="fb:app_id" content="239889349362973"/>'); ?>
-    <?php
-    $soc_med_page_desc = ucwords($item['title']);
-    if ($item['author']) {
-      $soc_med_page_desc .= ' by ' . $new_author_str;
-      drupal_set_html_head('<meta property="og:description" content="by ' . $new_author_str . '"/>');
-    }
-    ?>
-
-    <ul><li>       
-
-    <?php $tweettitle = $new_author_str ? ucwords($item['title']) . ' by ' . $new_author_str : ucwords($item['title']); ?>
-    <script src="http://platform.twitter.com/widgets.js" type="text/javascript"></script>
-    <div>
-       <a href="http://twitter.com/share" class="twitter-share-button"
-          data-url="<?php print $thispage; ?>"
-          data-via="darienlibrary"
-          data-text="<?php print $tweettitle; ?>"
-          data-related="darienlibrary:Darien Library">Tweet</a>
-    </div>
-
-    <div id="fb-root"></div><script src="http://connect.facebook.net/en_US/all.js#appId=239889349362973&amp;xfbml=1"></script><fb:like hr
-ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" width="450" show_faces="true" font="verdana"></fb:like>
-
-    <div style="padding-top:3px;"><a href="http://pinterest.com/pin/create/button/?url=<?php print urlencode($thispage); ?>&media=<?php print urlencode($full_cover_image_url); ?>&description=<?php print urlencode($soc_med_page_desc); ?>" class="pin-it-button" count-layout="horizontal">Pin It</a>
-    <script type="text/javascript" src="http://assets.pinterest.com/js/pinit.js"></script></div>
-
-    </li></ul>
 
     <!-- Item Details -->
     <ul>
@@ -144,16 +134,13 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
       if ($item['pub_year']) {
         print '<li><b>Year Published:</b> ' . $item['pub_year'] . '</li>';
       }
-      if ($item['series']) {
-        print '<li><b>Series:</b> ' . l($item['series'], $url_prefix . '/search/series/' . urlencode($series)) . '</li>';
-      }
       if ($item['edition']) {
         print '<li><b>Edition:</b> ' . $item['edition'] . '</li>';
       }
       if ($item['descr']) {
         print '<li><b>Description:</b> ' . nl2br($item['descr']) . '</li>';
       }
-      if ($item['stdnum']) {
+      if ($item['stdnum'] && !is_array($item['stdnum'])) {
         print '<li><b>ISBN/Standard #:</b>' . $item['stdnum'] . '</li>';
       }
       if ($item['lang']) {
@@ -162,14 +149,54 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
       if ($item['mat_code']) {
         print '<li><b>Format:</b> ' . $locum_config['formats'][$item['mat_code']] . '</li>';
       }
+      if ($item['mpaa_rating'] && $item['mat_code'] == 'u') { ?>
+        <li><strong>Rated:</strong> <span class="mpaa_rating"><?php echo $item['mpaa_rating']; ?></span></li>
+      <?php } ?>
+    </ul>
+    <?php if (($item['stdnum'] && is_array($item['stdnum'])) || ($item['upc'] && is_array($item['upc']) )) { ?>
+    <h3>ISBN/Standard Number</h3>
+    <ul>
+    <?php
+      if (count($item['stdnum'])) {
+        foreach($item['stdnum'] as $stdnum) {
+          print '<li>' . $stdnum . '</li>';
+        }
+      }
+      if (count($item['upc'])) {
+        foreach($item['upc'] as $upc) {
+          print '<li>' . $upc . '</li>';
+        }
+      }
+      ?>
+
+    </ul>
+    <?php } ?>
+    <?php if ($item['genres']) { ?>
+    <h3>Genres</h3>
+    <ul>
+     <?php
+        foreach($item['genres'] as $genre) {
+          print '<li>' . l($genre, $url_prefix . '/search/callnum/"' . urlencode(str_replace('/',' ',$genre)).'"',array('query' => array('mat_type' => 'j'))) . '</li>';
+        }
       ?>
     </ul>
+    <?php } ?>
+     <?php if ($item['series']) { ?>
+     <h3>Series</h3>
+     <ul>
+     <?php
+        foreach($item['series'] as $series) {
+          print '<li>' . l($series, $url_prefix . '/search/series/"' . urlencode($series).'"') . '</li>';
+        }
+      ?>
+      </ul>
+      <?php } ?>
 
     <!-- Additional Credits -->
     <?php
     if ($item['addl_author']) {
       print '<h3>Additional Credits</h3><ul>';
-      $addl_author_arr = unserialize($item['addl_author']);
+      $addl_author_arr = $item['addl_author'];
       foreach ($addl_author_arr as $addl_author) {
         $addl_author_link = $url_prefix . '/search/author/%22' . urlencode($addl_author) .'%22';
         print '<li>' . l($addl_author, $addl_author_link) . '</li>';
@@ -182,7 +209,7 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
     <?php
     if ($item['subjects']) {
       print '<h3>Subjects</h3><ul>';
-      $subj_arr = unserialize($item['subjects']);
+      $subj_arr = $item['subjects'];
       if (is_array($subj_arr)) {
         foreach ($subj_arr as $subj) {
           $subjurl = $url_prefix . '/search/subject/%22' . urlencode($subj) . '%22';
@@ -192,15 +219,31 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
       print '</ul>';
     }
     ?>
-
+    <!-- Lists -->
+    <?php if ($item['lists']){ ?>
+    <h3>Recently Listed On</h3>
+    <ul>
+    <?php foreach($item['lists'] as $list) { ?>
+      <li><?php echo l($list['title'],'user/lists/'.$list['list_id']); ?></li>
+    <?php } ?>
+    </ul>
+    <?php } ?>
     <!-- Tags -->
     <?php
     if (variable_get('sopac_social_enable', 1)) {
-      print '<h3>Tags</h3>';
       $block = module_invoke('sopac','block','view', 4);
       print $block['content'];
     }
-    ?>
+  ?>
+    <h3>Share This</h3>
+    <script type="text/javascript" src="http://platform.twitter.com/widgets.js"></script>
+    <script src="http://connect.facebook.net/en_US/all.js#xfbml=1"></script>
+    <script type="text/javascript" src="https://apis.google.com/js/plusone.js"></script>
+    <ul>
+    <li><fb:like href="http://www.aadl.org/catalog/record/<?php echo $item['_id']; ?>" layout="button_count" show_faces="false" width="450" font=""></fb:like></li>
+    <li><a href="http://twitter.com/share" class="twitter-share-button" data-url="http://www.aadl.org/catalog/record/<?php echo $item['_id']; ?>" data-text="Enjoying <?php echo title_case($item['title'] . ' ' .$item['title_medium']); ?>" data-count="none" data-via="aadl">Tweet</a></li>
+    <li><g:plusone size="small"></g:plusone></li>
+    </ul>
 
   <!-- end left-hand column -->
   </div>
@@ -211,54 +254,99 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
 
     <!-- Supressed record notification -->
     <?php
-    if ($item['active'] == '0') {
-      print '<div class="suppressed">This Record is Suppressed</div>';
-    }
+      if ($item['active'] == '0') {
+        print '<div class="suppressed">This Record is Suppressed</div>';
+      }
     ?>
+
+    <div class="item-main">
+    <!-- Item Format Icon -->
+    <ul class="item-format-icon">
+      <li><img src="<?php print base_path() . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png' ?>"></li>
+      <li style="margin-top: -2px;"><?php print wordwrap($locum_config['formats'][$item['mat_code']], 8, '<br />'); ?></li>
+    </ul>
+
+    <!-- Actions -->
+    <ul class="item-actions">
+      <?php
+      if ($item_status['libuse'] > 0 && $item_status['libuse'] == $item_status['total']) { ?>
+        <li class="button">Library Use Only</li>
+      <?php } else if (in_array($item['loc_code'], $no_circ) || in_array($item['mat_code'], $no_circ)) { ?>
+            <li class="button red">Not Requestable</li>
+      <?php }
+      else {
+        print sopac_put_request_link($item['bnum'], 1, 0, $locum_config['formats'][$item['mat_code']]);
+        if(user_access('staff request')){
+              print sopac_put_staff_request_link($item['bnum']);
+        }
+      }
+      if ($user->uid) {
+        include_once('sopac_user.php');
+        print sopac_put_list_links($item['bnum']);
+      }
+      // Summer Game links
+      if (module_exists('summergame')) {
+        if (variable_get('summergame_points_enabled', 0)) {
+          if ($player = summergame_player_load(array('uid' => $user->uid))) {
+            print '<li class="button">' .
+                  l('I Finished This', 'http://play.aadl.org/summergame/player/consume/' . $player['pid'] . '/' . $item['bnum']) .
+                  '</li>';
+          }
+        }
+      }
+      ?>
+    </ul>
 
     <!-- Item Title -->
     <h1>
       <?php
-      print ucwords($item['title']);
+      print title_case($item['title']);
       if ($item['title_medium']) {
-        print " $item[title_medium]";
+        print ' '.title_case($item[title_medium]);
       }
       ?>
     </h1>
-
-    <!-- Item Format Icon -->
-    <ul class="item-format-icon">
-      <li><img src="<?php print '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png' ?>"></li>
-      <li style="margin-top: -2px;"><?php print wordwrap($locum_config['formats'][$item['mat_code']], 8, '<br />'); ?></li>
-    </ul>
-
+    <?php if($item['non_romanized_title']) { ?>
+        <h1><?php echo $item['non_romanized_title']; ?></h1>
+    <?php } ?>
     <!-- Item Author -->
     <?php
     if ($item['author']) {
       $authorurl = $url_prefix . '/search/author/' . $new_author_str;
-      print '<h3>by ' . l($new_author_str, $authorurl) . '</h3>';
-    }
     ?>
-
-    <!-- Request Link -->
-    <?php
-    if (!in_array($item['loc_code'], $no_circ) && !$item['download_link']) {
-      print '<div class="item-request">';
-      print '<p>' . sopac_put_request_link($item['bnum'], 1, 0, $locum_config['formats'][$item['mat_code']]) . '</p>';
-      print '<h3>' . $reqtext . '</h3>';
-      print '</div>';
-    }
+      <h3>by <?php echo l($new_author_str, $authorurl); ?><?php if($item['non_romanized_author']){ echo " (". $item['non_romanized_author'] .")";}?></h3>
+    <?php }
+    $avail_class = ($item_status['avail'] ? "request-avail" : "request-unavail");
+    print '<p class="item-request ' . $avail_class . '">' . $reqtext . '</p>';
     ?>
+    </div>
 
     <!-- Where to find it -->
     <div class="item-avail-disp">
       <h2>Where To Find It</h2>
       <?php
       if ($item_status['callnums']) {
-        print '<p>Call number: <strong>' . implode(", ", $item_status['callnums']) . '</strong></p>';
+        if (count($item_status['callnums']) > 10) {
+          print '<p>Call number: <strong>' . l($item['callnum'], $url_prefix . '/search/callnum/"' . urlencode($item['callnum']) .'"',array('alias' => TRUE)) . '</strong> (see all copies below for individual call numbers)</p>';
+        } else {
+          print '<p>Call number: <strong>' . implode(", ", array_map('linkfromcallnum', array_keys($item_status['callnums']))) . '</strong></p>';
+        }
       }
 
-      if (count($item_status['items']) && !$no_avail_mat_codes) {
+      if (count($item_status['items'])) {
+        if ($item_status['avail']) {
+          // Build list of locations
+          $locations = array();
+          foreach ($item_status['items'] as $itemstat) {
+            if ($itemstat['avail']) {
+              $locations[$itemstat['loc_code']] = $itemstat['location'];
+            }
+          }
+          $locations = implode(', ', $locations);
+
+          print "<p>Available Copies: <strong>$locations</strong></p>";
+        }
+
         print '<div><fieldset class="collapsible collapsed"><legend>Show All Copies (' . count($item_status['items']) . ')</legend><div>';
         if (variable_get('sopac_multi_branch_enable', 0)) {
           print theme('table', array("Location", "Call Number", "Branch", "Item Status"), $copy_status_array);
@@ -283,7 +371,49 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
       }
       ?>
     </div>
-
+    <?php if($item['tq_item']){ ?>
+    <div id="item-trailer">
+    <h2><?php echo $item['tq_item']; ?></h2>
+    <p><?php echo $item['tq_text']; ?></p>
+    </div>
+    <?php } ?>
+    <?php if($trailer_url){ ?>
+    <div id="item-trailer">
+      <h2>Trailer / Previews</h2>
+      <p>
+      <object classid='clsid:D27CDB6E-AE6D-11cf-96B8-444553540000' width='480' height='308' id='single1' name='single1'>
+      <param name='movie' value='http://media.aadl.org/jw52/player.swf'>
+      <param name='allowfullscreen' value='true'>
+      <param name='allowscriptaccess' value='always'>
+      <param name='wmode' value='transparent'>
+      <param name='flashvars' value='provider=video&file=<?php echo rawurlencode($trailer_url); if($trailer_image) { echo '&image='.$trailer_image; } ?>'>
+      <embed
+      type='application/x-shockwave-flash'
+      id='single2'
+      name='single2'
+      src='http://media.aadl.org/jw52/player.swf'
+      width='480'
+      height='308'
+      bgcolor='undefined'
+      allowscriptaccess='always'
+      allowfullscreen='true'
+      wmode='transparent'
+      flashvars='provider=video&file=<?php echo rawurlencode($trailer_url); if($trailer_image) { echo '&image='.$trailer_image; } ?>' />
+      </object>
+      </p>
+      <p>Trailers Powered by Internet Video Archive</p>
+    </div>
+    <?php } ?>
+    <?php if($item['tracks']) { ?>
+    <div id="item-samples">
+      <h2>Tracks</h2>
+      <ul class="samples">
+      <?php foreach($item['tracks'] as $track => $info) { ?>
+        <li><a href="http://media.aadl.org/cdsamples/<?php echo $item['trackupc']['upc']; ?>/<?php echo $item['trackupc']['upc']; ?>.<?php echo ltrim($info['track'],"0"); ?>.mp3"><?php echo $info['track']; ?>. <?php echo $info['name']; ?></a></li>
+      <?php } ?>
+      </ul>
+    </div>
+    <?php } ?>
     <!-- Notes / Additional Details -->
     <?php
     if (is_array($note_arr)) {
@@ -303,7 +433,8 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
       print '<h2>Reviews &amp; Summaries</h2>';
       print '<ul>';
       foreach ($item['review_links'] as $rev_title => $rev_link) {
-        print '<li>' . l($rev_title, $rev_link, array('attributes' => array('target' => '_new'))) . '</li>';
+        $rev_link = explode('?', $rev_link);
+        print '<li>' . l($rev_title, $rev_link[0], array('query' => $rev_link[1], 'attributes' => array('target' => '_new'))) . '</li>';
       }
       print '</ul></div>';
     }
@@ -340,13 +471,18 @@ ef="<?php print urlencode($thispage); ?>" send="true" layout="button_count" widt
     </div>
 
     <!-- Google Books Preview -->
+    <?php
+    foreach($item['stdnum'] as $stdnum) {
+      $isbnarr[] = 'ISBN:'.preg_replace("/[^0-9]/","", $stdnum);
+    }
+    ?>
     <div id="item-google-books">
       <div class="item-google-prev">
         <script type="text/javascript" src="http://books.google.com/books/previewlib.js"></script>
           <script type="text/javascript">
             var w=document.getElementById("item-google-books").offsetWidth;
             var h=(w*1.3);
-            GBS_insertEmbeddedViewer('ISBN:<?php print $item['stdnum']; ?>',w,h);
+            GBS_insertEmbeddedViewer(['<?php print implode("','",$isbnarr); ?>'],w,h);
           </script>
       </div>
     </div>

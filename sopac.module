@@ -16,11 +16,12 @@ function sopac_init() {
 
   // Handle SSL redirection if it is enabled.
   if (variable_get('sopac_ssl_enable', 0)) {
-    $protected_uri = preg_match('/^(\/user|\/myaccount|\/login)/', request_uri(), $debug_match);
-    if ($_SERVER['HTTPS'] && !$protected_uri) {
+    $protected_uri = preg_match('/^(\/user|\/myaccount|\/login|\/donate)/', request_uri(), $debug_match);
+    $lists = preg_match('/.*list.*/', request_uri(), $debug_match);
+    if (($_SERVER['HTTPS'] && !$protected_uri) || ($_SERVER['HTTPS'] && $lists)) {
       $new_link = 'http://' . $_SERVER['HTTP_HOST'] . request_uri();
     }
-    elseif (!$_SERVER['HTTPS'] && $protected_uri) {
+    elseif (!$_SERVER['HTTPS'] && $protected_uri && !$lists) {
       if (variable_get('sopac_ssl_port', 443) != '443') {
         $nonstd_port = ':' . variable_get('sopac_ssl_port', 443);
       }
@@ -34,6 +35,8 @@ function sopac_init() {
   // Set up some user-specific values
   if ($user->uid) {
     $user->locum_pass = substr($user->pass, 0, 7);
+    profile_load_profile($user);
+    $user->bcode_verified = sopac_bcode_isverified(&$user);
   }
 
   // Assign the various CSS Files
@@ -64,7 +67,7 @@ function sopac_help($path, $arg) {
  * @return array An array of valid permissions for the sopac module
  */
 function sopac_perm() {
-  return array('access user pages', 'administer sopac');
+  return array('access user pages', 'administer sopac', 'show suppressed records', 'staff request');
 }
 
 /**
@@ -84,38 +87,43 @@ function sopac_block($op = 'list', $delta = 0) {
 
     case 'list':
       $block[0] = array(
-         'info' => t('Catalog Facets'),
+        'info' => t('Catalog Facets'),
         'pages' => $sopac_prefix . '/search/*',
       );
       $block[1] = array(
-         'info' => t('Search Tracker'),
+        'info' => t('Search Tracker'),
         'pages' => $sopac_prefix . '/search/*',
       );
       $block[2] = array(
-         'info' => t('Catalog Tags'),
+        'info' => t('Catalog Tags'),
         'pages' => $sopac_prefix . '/*',
       );
       $block[3] = array(
-         'info' => t('Catalog Reviews'),
+        'info' => t('Catalog Reviews'),
         'pages' => $sopac_prefix . '/*',
         'weight' => 1,
       );
       $block[4] = array(
-         'info' => t('Item Tags'),
+        'info' => t('Item Tags'),
         'pages' => $sopac_prefix . '/record/*',
       );
       $block[5] = array(
-         'info' => t('Item Reviews'),
+        'info' => t('Item Reviews'),
         'pages' => $sopac_prefix . '/record/*',
         'weight' => 1,
       );
       $block[6] = array(
-         'info' => t('Personal Tags'),
+        'info' => t('Personal Tags'),
         'pages' => 'user/*',
       );
       $block[7] = array(
-         'info' => t('Personal Reviews'),
+        'info' => t('Personal Reviews'),
         'pages' => 'user/*',
+        'weight' => 1,
+      );
+      $block[8] = array(
+        'info' => t('Public Lists'),
+        'pages' => $sopac_prefix . '/*',
         'weight' => 1,
       );
       return $block;
@@ -170,6 +178,11 @@ function sopac_block($op = 'list', $delta = 0) {
           $block['subject'] = t('My Reviews');
           $block['content'] = theme('sopac_review_block', 'personal');
           break;
+        case 8:
+          require_once('sopac_user.php');
+          $block['subject'] = t('Public Lists');
+          $block['content'] = theme('sopac_list_block', 'public');
+          break;
       }
 
       return $block;
@@ -194,6 +207,16 @@ function sopac_menu() {
     'description' => 'SOPAC configuration options',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('sopac_admin'),
+    'access arguments' => array('access administration pages'),
+    'file' => 'sopac_admin.php',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/settings/sopac/moderate'] = array(
+    'title' => 'Moderate SOPAC Reviews',
+    'description' => 'SOPAC Moderation Page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sopac_admin_moderate_form'),
     'access arguments' => array('access administration pages'),
     'file' => 'sopac_admin.php',
     'type' => MENU_NORMAL_ITEM,
@@ -224,6 +247,21 @@ function sopac_menu() {
     'type' => MENU_CALLBACK,
   );
 
+  $items[variable_get('sopac_url_prefix', 'cat/seek') . '/record/%/reharvest'] = array(
+    'title' => 'Item Record',
+    'page callback' => 'sopac_bib_record_reharvest',
+    'access arguments' => array('access content'),
+    'file' => 'sopac_catalog.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items[$sopac_prefix . '/record/%/download'] = array(
+    'title' => 'Item Record',
+    'page callback' => 'sopac_bib_record_download',
+    'access arguments' => array('access content'),
+    'file' => 'sopac_catalog.php',
+    'type' => MENU_CALLBACK,
+  );
   $items[$sopac_prefix . '/request'] = array(
     'title' => 'Request an Item',
     'page callback' => 'sopac_request_item',
@@ -257,8 +295,8 @@ function sopac_menu() {
       'type' => MENU_CALLBACK,
     );
   }
-  $items['user/holds'] = array(
-    'title' => 'My Holds',
+  $items['user/requests'] = array(
+    'title' => 'My Requests',
     'page callback' => 'sopac_holds_page',
     'access arguments' => array('access user pages'),
     'file' => 'sopac_user.php',
@@ -385,6 +423,64 @@ function sopac_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
 
+  $items['user/lists'] = array(
+    'title' => 'My Lists',
+    'page callback' => 'sopac_lists_page',
+    'access arguments' => array('access content'),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/lists/edit'] = array(
+    'title' => 'Modify List',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sopac_list_edit_form', 3),
+    'access callback' => 'sopac_lists_access',
+    'access arguments' => array(3),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/lists/delete/%'] = array(
+    'title' => 'Delete List',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sopac_list_confirm_delete', 3),
+    'access callback' => 'sopac_lists_access',
+    'access arguments' => array(3),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/listadd/%/%'] = array(
+    'title' => 'Add To List',
+    'page callback' => 'sopac_list_add',
+    'page arguments' => array(2, 3),
+    'access callback' => 'sopac_lists_access',
+    'access arguments' => array(3),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/listmovetop/%/%'] = array(
+    'title' => 'Add To List',
+    'page callback' => 'sopac_list_move_top',
+    'page arguments' => array(2, 3),
+    'access callback' => 'sopac_lists_access',
+    'access arguments' => array(2),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/listdelete/%/%'] = array(
+    'title' => 'Add To List',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sopac_list_confirm_item_delete', 2, 3),
+    'access callback' => 'sopac_lists_access',
+    'access arguments' => array(2),
+    'file' => 'sopac_user.php',
+    'type' => MENU_CALLBACK,
+  );
+
   $items['review/delete'] = array(
     'title' => 'Delete Review',
     'page callback' => 'drupal_get_form',
@@ -421,6 +517,7 @@ function sopac_menu() {
     'type' => MENU_CALLBACK,
   );
 
+
   return $items;
 }
 
@@ -437,12 +534,20 @@ function sopac_theme() {
       'template' => 'sopac-results-rss',
       'arguments' => array('result_info' => NULL, 'search_term' => NULL, 'search_type' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL),
     ),
+    'sopac_results_xml' => array(
+      'template' => 'sopac-results-xml',
+      'arguments' => array('result_info' => NULL, 'hitlist_pager' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL),
+    ),
     'sopac_results_hitlist' => array(
       'template' => 'sopac-results-hitlist',
-      'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL),
+      'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL, 'minimal' => NULL),
     ),
     'sopac_results_hitlist_rss' => array(
       'template' => 'sopac-results-hitlist-rss',
+      'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL),
+    ),
+    'sopac_results_hitlist_xml' => array(
+      'template' => 'sopac-results-hitlist-xml',
       'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL),
     ),
     'sopac_results_nohits' => array(
@@ -452,6 +557,10 @@ function sopac_theme() {
     'sopac_record' => array(
       'template' => 'sopac-record',
       'arguments' => array('item' => NULL, 'item_status' => NULL, 'locum_config' => NULL, 'no_circ' => NULL, 'locum' => NULL, 'rev_arr' => NULL, 'rev_form' => NULL),
+    ),
+    'sopac_record_musicdownload' => array(
+      'template' => 'sopac-record-musicdownload',
+      'arguments' => array('item' => NULL, 'locum_config' => NULL, 'rev_arr' => NULL, 'rev_form' => NULL),
     ),
     'sopac_review' => array(
       'template' => 'sopac-review',
@@ -476,6 +585,10 @@ function sopac_theme() {
     'sopac_pat_overview' => array(
       'template' => 'sopac-pat-overview',
       'arguments' => array('review_display' => NULL, 'ratings_chunk' => NULL, 'tag_cloud' => NULL),
+    ),
+    'sopac_patron_profile' => array(
+      'arguments' => array('element' => NULL),
+      'template' => 'sopac-patroninfo-profile',
     ),
     'sopac_ratings_page' => array(
       'template' => 'sopac-ratings-page',
@@ -509,6 +622,21 @@ function sopac_theme() {
       'template' => 'sopac-user-holds-list-multirow',
       'arguments' => array('data' => array()),
     ),
+    'sopac_list' => array(
+      'arguments' => array('list' => NULL),
+    ),
+    'sopac_list_form' => array(
+      'arguments' => array('form' => NULL),
+    ),
+    'sopac_list_block' => array(
+      'arguments' => array('block_type' => NULL),
+    ),
+    'sopac_admin_moderate_reviews' => array(
+      'arguments' => array('form' => NULL),
+    ),
+    'sopac_admin_moderate_tags' => array(
+      'arguments' => array('form' => NULL),
+    ),
   );
 }
 
@@ -539,7 +667,7 @@ function sopac_user($op, &$edit, &$account, $category = NULL) {
   require_once('sopac_user.php');
   switch ($op) {
     case 'submit':
-      sopac_update_locum_acct($op, $edit, $account);
+      sopac_update_locum_acct($op, $edit, $account, $category);
       break;
 
     case 'view':
@@ -605,8 +733,44 @@ function sopac_search_form($form_type = 'both') {
  * @return string cleaned-up URI.
  */
 function utf8_urldecode($str) {
-  $str = preg_replace("/%u([0-9a-f]{3,4})/i", "&#x\\1;", urldecode($str));
+  $str = preg_replace("/%u([0-9a-f]{3,4})/i", "&#x\\1;", rawurldecode($str));
   return html_entity_decode($str, NULL, 'UTF-8');
+}
+
+/*
+ * Exceptions in lower case are words you don't want converted
+ * Exceptions all in upper case are any words you don't want converted to title case
+ *   but should be converted to upper case, e.g.:
+ *   king henry viii or king henry Viii should be King Henry VIII
+ * From: http://www.php.net/manual/en/function.mb-convert-case.php#92317
+ */
+function title_case($string) {
+  $delimiters = array(" ", "-", ".", "O'", "Mc");
+  $exceptions = array("út", "u", "s", "és", "utca", "tér", "krt", "körút", "sétány", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV", "XXV", "XXVI", "XXVII", "XXVIII", "XXIX", "XXX", "3rd", "2nd" );
+
+  $string = mb_convert_case($string, MB_CASE_TITLE, "UTF-8");
+
+  foreach ($delimiters as $dlnr => $delimiter){
+    $words = explode($delimiter, $string);
+    $newwords = array();
+    foreach ($words as $wordnr => $word){
+      if (in_array(mb_strtoupper($word, "UTF-8"), $exceptions)){
+        // check exceptions list for any words that should be in upper case
+        $word = mb_strtoupper($word, "UTF-8");
+      }
+      elseif (in_array(mb_strtolower($word, "UTF-8"), $exceptions)){
+        // check exceptions list for any words that should be in upper case
+        $word = mb_strtolower($word, "UTF-8");
+      }
+      elseif (!in_array($word, $exceptions) ){
+        // convert to uppercase (non-utf8 only)
+        $word = mb_convert_case($word, MB_CASE_TITLE, "UTF-8");
+      }
+      array_push($newwords, $word);
+    }
+    $string = join($delimiter, $newwords);
+  }
+  return $string;
 }
 
 /**
@@ -632,7 +796,7 @@ function sopac_parse_uri($strip_prefix = TRUE) {
   }
 
   foreach ($uri_array as $uri_elem) {
-    $result[] = urldecode(trim($uri_elem));
+    $result[] = utf8_urldecode(trim($uri_elem));
   }
 
   return $result;
@@ -830,8 +994,8 @@ function sopac_get_insurge($type = 'client', $refresh = FALSE) {
  * implementation of hook_form_alter for user_profile_form
  */
 function sopac_form_user_profile_form_alter(&$form, &$form_state) {
-  if (!in_array($form['#validate'], 'sopac_user_profile_form_validate')) {
-  	array_unshift($form['#validate'], 'sopac_user_profile_form_validate');
+  if (!in_array('sopac_user_profile_form_validate', $form['#validate'])) {
+    array_unshift($form['#validate'], 'sopac_user_profile_form_validate');
   }
 }
 
@@ -842,5 +1006,36 @@ function sopac_form_user_profile_form_alter(&$form, &$form_state) {
  * @param array $form_state
  */
 function sopac_user_profile_form_validate(&$form, &$form_state) {
-  $form_state['values']['profile_pref_cardnum'] = trim($form_state['values']['profile_pref_cardnum']);
+  $form_state['values']['profile_pref_cardnum'] = preg_replace('[^0-9]', '', $form_state['values']['profile_pref_cardnum']);
+}
+
+function sopac_lists_access($list_id) {
+  if (intval($list_id)) {
+    // Existing list
+    $access = FALSE;
+    if (user_access('administer sopac')) {
+      $access = TRUE;
+    }
+    else {
+      global $user;
+      $list = db_fetch_object(db_query("SELECT * FROM sopac_lists WHERE list_id = %d LIMIT 1", $list_id));
+      if ($user->uid == $list->uid) {
+        $access = TRUE;
+      }
+    }
+  }
+  else {
+    // New list or wishlist
+    $access = TRUE;
+  }
+  return $access;
+}
+
+function template_preprocess_sopac_patron_profile(&$variables) {
+  $variables['title'] = check_plain($variables['element']['#title']);
+  $variables['profile_items'] = $variables['element']['#children'];
+  $variables['attributes'] = '';
+  if (isset($variables['element']['#attributes'])) {
+    $variables['attributes'] = drupal_attributes($variables['element']['#attributes']);
+  }
 }

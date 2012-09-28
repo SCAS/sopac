@@ -60,8 +60,11 @@ function sopac_personal_overview_page() {
       $rate_bnums[] = $rate_arr['bnum'];
     }
   }
-  $ratings_chunk['bibs'] = $locum->get_bib_items_arr($rate_bnums);
-
+  $bibs = $locum->get_bib_items($rate_bnums);
+  foreach($bibs as $bib){
+    $ratings[$bib['id']] = $bib['doc'];
+  }
+  $ratings_chunk['bibs'] = $ratings;
   // Pull together the tags
   $tag_arr = $insurge->get_tag_totals($user->uid, NULL, NULL, variable_get('sopac_random_tags', 1), variable_get('sopac_tag_limit', 100), 0, variable_get('sopac_tag_sort', 'ORDER BY count DESC'));
   if (count($tag_arr)) {
@@ -97,7 +100,12 @@ function sopac_ratings_page() {
       $rate_bnums[] = $rate_arr['bnum'];
     }
   }
-  $ratings_arr['bibs'] = $locum->get_bib_items_arr($rate_bnums);
+  $bibs = $locum->get_bib_items($rate_bnums);
+  foreach($bibs as $bib){
+    $ratings[$bib['id']] = $bib['doc'];
+  }
+  $ratings_arr['bibs'] = $ratings;
+
   $result_page = theme('sopac_ratings_page', $ratings_arr);
   $result_page .= theme('pager', NULL, $page_limit, 0, NULL, 6);
   return $result_page;
@@ -152,9 +160,19 @@ function theme_sopac_tag_block($block_type) {
       $bnum = $uri_arr[1];
       $bnum_arr[] = $bnum;
       if ($_GET['deltag'] && $bnum && $user->uid) {
-        $insurge->delete_user_tag($user->uid, $_GET['deltag'], $bnum);
-        $new_link = 'http://' . $_SERVER['HTTP_HOST'] . '/' . $_GET[q];
-        header("Location: $new_link");
+        $insurge->delete_user_tag($user->uid, urldecode($_GET['deltag']), $bnum);
+        drupal_set_message('Tag "' . urldecode($_GET['deltag']) . '" Deleted');
+        if ($player = summergame_player_load(array('uid' => $user->uid))) {
+          // Delete the points from the player record if found
+          db_query("DELETE FROM sg_ledger WHERE pid = %d AND code_text = 'Tagged an Item' " .
+                   "AND description LIKE '%%bnum:%d' AND description LIKE '%%%s%%'",
+                   $player['pid'], $bnum, urldecode($_GET['deltag']));
+          if (db_affected_rows()) {
+            $player_link = l('Summer Game score card', 'summergame/player/' . $player['pid']);
+            drupal_set_message("Removed points for this tag from your $player_link");
+          }
+        }
+        drupal_goto($_GET[q]);
       }
       $tag_arr = $insurge->get_tag_totals(NULL, $bnum_arr);
       $tag_arr_user = $insurge->get_tag_totals($user->uid, $bnum_arr, NULL, FALSE, NULL, NULL, 'ORDER BY tag ASC');
@@ -168,7 +186,7 @@ function theme_sopac_tag_block($block_type) {
 
   if ($user->uid){
     if ($put_tag_form) {
-      $block_suffix = '<br /><br />' . drupal_get_form('sopac_tag_form');
+      $block_suffix = '<br /><br />' . drupal_get_form('sopac_tag_form', $bnum);
     }
   }
   else {
@@ -206,7 +224,7 @@ function sopac_user_tag_edit() {
   $pathinfo = explode('/', trim($_GET['q']));
   $tag = $pathinfo[3];
   if ($_GET['ref']) {
-    $form['#redirect'] = substr(urldecode($_GET['ref']), 1);
+    $form['#redirect'] = urldecode($_GET['ref']);
   }
   $form['tagform'] = array(
     '#type' => 'fieldset',
@@ -247,7 +265,7 @@ function sopac_user_tag_delete() {
 
   $insurge = sopac_get_insurge();
   $pathinfo = explode('/', trim($_GET['q']));
-  $tag = $pathinfo[3];
+  $tag = urldecode($pathinfo[3]);
   $tag_total_arr = $insurge->get_tag_totals($user->uid, NULL, $tag);
   $tag_total = $tag_total_arr[0]['count'];
   $tag_total_str = ($tag_total > 1) ? $tag_total . t(' things') : $tag_total . t(' thing');
@@ -255,7 +273,7 @@ function sopac_user_tag_delete() {
   drupal_set_message(t('You have tagged ') . $tag_total_str . t(' with "') . $tag . t('".  If you delete this tag, it will be removed completely.'), 'warning');
 
   if ($_GET['ref']) {
-    $form['#redirect'] = substr(urldecode($_GET['ref']), 1);
+    $form['#redirect'] = urldecode($_GET['ref']);
   }
   $form['tagform'] = array(
     '#type' => 'fieldset',
@@ -305,17 +323,18 @@ function sopac_user_tag_hitlist($tag) {
   $pager_body = theme('pager', NULL, $page_limit, 0, NULL, 6);
   $hitnum = $page_offset + 1;
   $result_body = '';
+  $result_body .= '<table class="hitlist-content">';
   foreach ($bnum_arr['bnums'] as $bnum) {
     $locum_result = $locum->get_bib_item($bnum);
 
     // Grab Stdnum
-    $stdnum = $locum_result['stdnum'];
+    $stdnum = $locum_result['stdnum'][0];
     // Grab item status from Locum
     $locum_result['status'] = $locum->get_item_status($bnum);
     // Get the cover image
     $cover_img_url = $locum_result['cover_img'];
     // Grab Syndetics reviews, etc..
-    $review_links = $locum->get_syndetics($locum_result['stdnum']);
+    $review_links = $locum->get_syndetics($locum_result['stdnum'][0]);
     if (count($review_links)) {
       $locum_result['review_links'] = $review_links;
     }
@@ -323,6 +342,7 @@ function sopac_user_tag_hitlist($tag) {
     $result_body .= theme('sopac_results_hitlist', $hitnum, $cover_img_url, $locum_result, $locum->locum_config, $no_circ);
     $hitnum++;
   }
+  $result_body .= "</table>";
   $result_body = theme('sopac_user_tag_hitlist', $tag, $pager_body, $result_body);
 
   return $result_body;
@@ -333,7 +353,7 @@ function sopac_user_tag_hitlist($tag) {
  *
  * @return array Drupal form array.
  */
-function sopac_tag_form() {
+function sopac_tag_form($form_state, $bnum) {
   $form['tagform'] = array(
     '#type' => 'fieldset',
     '#title' => t('Add tags '),
@@ -351,9 +371,13 @@ function sopac_tag_form() {
     '#value' => t('Add Tags'),
     '#attributes' => array('class' => 'tagsubmit'),
   );
+  $form['tagform']['help'] = array(
+    '#type' => 'item',
+    '#value' => "Separate tags with a comma.",
+  );
   $form['tagform']['bnum'] = array(
     '#type' => 'hidden',
-    '#default_value' => 0,
+    '#default_value' => $bnum,
   );
   return $form;
 }
@@ -365,7 +389,7 @@ function sopac_tag_form_validate($form, &$form_state) {
     return;
   }
   $bnum = $form_state['values']['bnum'];
-  if (!$bnum || !is_numeric($bnum)) {
+  if (!$bnum) {
     form_set_error('tags', t("We're sorry, but we cannot determine which item you're trying to add a tag to. Please try again."));
     return;
   }
@@ -379,12 +403,27 @@ function sopac_tag_form_submit($form, &$form_state) {
   global $user;
   $bnum = $form_state['values']['bnum'];
   $insurge = sopac_get_insurge();
-  $insurge->submit_tags($user->uid, $bnum, trim($form_state['values']['tags']));
+  $tids = $insurge->submit_tags($user->uid, $bnum, trim($form_state['values']['tags']));
+
+  // Summer Game
+  if (count($tids) && module_exists('summergame')) {
+    if (variable_get('summergame_points_enabled', 0)) {
+      if ($player = summergame_player_load(array('uid' => $user->uid))) {
+        foreach ($tids as $tid) {
+          $tag = $insurge->get_tag($tid);
+          $points = summergame_player_points($player['pid'], 10, 'Tagged an Item',
+                                             'Added ' . $tag['tag'] . ' bnum:' . $bnum);
+          $points_link = l($points . ' Summer Game points', 'summergame/player');
+          drupal_set_message("Earned $points_link for tagging an item in the catalog");
+        }
+      }
+    }
+  }
 }
 
 function theme_sopac_tag_cloud($tags, $cloud_type = 'catalog', $min_size = 10, $max_size = 24, $wraplength = 19) {
   if (!count($tags)) {
-    return t('No tags.');
+    return '<h3>Tags</h3>'.t('No tags.');
   }
 
   // largest and smallest array values
@@ -402,22 +441,55 @@ function theme_sopac_tag_cloud($tags, $cloud_type = 'catalog', $min_size = 10, $
 
   // loop through the tag array
   foreach ($tags as $tag => $value) {
-    if ($cloud_type == 'personal') {
-      $link = 'user/tag/show/' . urlencode($tag);
+    if(preg_match("/^([a-z](?:[a-z0-9_]+))\:([a-z](?:[a-z0-9_]+))\=(.*)/i",$tag, $mt)) {
+      $machinetags[] = $mt;
     }
     else {
-      $link = variable_get('sopac_url_prefix', 'cat/seek') . '/search/tags/' . urlencode($tag);
+      if ($cloud_type == 'personal') {
+        $link = 'user/tag/show/' . urlencode($tag);
+      }
+      else {
+        $link = variable_get('sopac_url_prefix', 'cat/seek') . '/search/tags/' . urlencode($tag);
+      }
+      $size = round($min_size + (($value - $min_qty) * $step));
+      if ($spread == 1) {
+        $size = $size + 2;
+      }
+  //    $disp_tag = htmlentities(wordwrap($tag, $wraplength, "-<br />-", 1));
+      $disp_tag = htmlentities($tag, ENT_NOQUOTES, 'UTF-8');
+      $attributes = array('title' => $value . ' things tagged with ' . $tag, 'style' => 'font-size: ' . $size . 'px');
+      $cloud .= l($disp_tag, $link, array('attributes' => $attributes)) . ' ';
     }
-    $size = round($min_size + (($value - $min_qty) * $step));
-    if ($spread == 1) {
-      $size = $size + 2;
-    }
-//    $disp_tag = htmlentities(wordwrap($tag, $wraplength, "-<br />-", 1));
-    $disp_tag = htmlentities($tag, ENT_NOQUOTES, 'UTF-8');
-    $attributes = array('title' => $value . ' things tagged with ' . $tag, 'style' => 'font-size: ' . $size . 'px');
-    $cloud .= l($disp_tag, $link, array('attributes' => $attributes)) . ' ';
   }
-  return '<div class="tag-cloud">' . $cloud . '</div>';
+  if ($machinetags) {
+    $content .= '<h3>Game Code</h3><ul>';
+    global $user;
+    if ($user->uid) {
+      $player = summergame_player_load(array('uid' => $user->uid));
+    }
+    foreach ($machinetags as $machinetag) {
+      if ($machinetag[1] == 'sg') {
+        $text = strtoupper($machinetag[3]);
+        $content .= '<li>';
+        if ($player['pid']) {
+          $content .= l($text, 'http://play.aadl.org/summergame/player/gamecode/' . $player['pid'],
+                        array('query' => array('text' => $text)));
+        }
+        else {
+          $content .= l($text, 'http://play.aadl.org/summergame/player');
+        }
+        $content .= '</li>';
+      }
+    }
+    $content .= '</ul>';
+  }
+  if($cloud){
+    $content .=  '<h3>Tags</h3><div class="tag-cloud">' . $cloud . '</div>';
+  } else {
+    $content .= '<h3>Tags</h3>'.t('No tags.');
+  }
+  return $content;
+
 }
 
 function sopac_review_page($page_type) {
@@ -535,7 +607,7 @@ function sopac_review_form() {
     $collapsed = FALSE;
     $form_type = 'edit';
     $bnum = $review['bnum'];
-    $form['#redirect'] = substr(urldecode($_GET['ref']), 1);
+    $form['#redirect'] = urldecode($_GET['ref']);
   }
   else {
     $title = t('Write a Review!');
@@ -598,6 +670,17 @@ function sopac_review_form_submit($form, &$form_state) {
     }
     elseif ($form_state['values']['form_type'] == 'new') {
       $insurge->submit_review($user->uid, $form_state['values']['rev_bnum'], $form_state['values']['rev_title'], $form_state['values']['rev_body']);
+      // Summer Game
+      if (module_exists('summergame')) {
+        if (variable_get('summergame_points_enabled', 0)) {
+          if ($player = summergame_player_load(array('uid' => $user->uid))) {
+            $points = summergame_player_points($player['pid'], 100, 'Wrote Review',
+                                               $form_state['values']['rev_title'] . ' bnum:' . $form_state['values']['rev_bnum']);
+            $points_link = l($points . ' Summer Game points', 'summergame/player');
+            drupal_set_message("Earned $points_link for writing a review");
+          }
+        }
+      }
     }
   }
 }
@@ -655,7 +738,7 @@ function sopac_delete_review_form() {
   $pathinfo = explode('/', trim($_GET['q']));
   $rev_id = $pathinfo[2];
 
-  $form['#redirect'] = substr(urldecode($_GET['ref']), 1);
+  $form['#redirect'] = urldecode($_GET['ref']);
   $form['revform'] = array(
     '#type' => 'fieldset',
     '#title' => t('Do you really want to delete this review?'),
@@ -683,6 +766,22 @@ function sopac_delete_review_form_submit($form, &$form_state) {
 
   if (strtolower($form_state['values']['op']) == 'yes') {
     $insurge = sopac_get_insurge();
+
+    if (module_exists('summergame')) {
+      if ($player = summergame_player_load(array('uid' => $user->uid))) {
+        $reviews = $insurge->get_reviews(NULL, NULL, array($form_state['values']['rev_id']));
+        $review = $reviews['reviews'][0];
+
+        // Delete the points from the player record if found
+        db_query("DELETE FROM sg_ledger WHERE pid = %d AND code_text = 'Wrote Review' " .
+                 "AND description LIKE '%%bnum:%d' AND description LIKE '%s%%'",
+                 $player['pid'], $review['bnum'], $review['rev_title']);
+        if (db_affected_rows()) {
+          $player_link = l($points . ' Summer Game score card', 'summergame/player');
+          drupal_set_message("Removed points for this review from your $player_link");
+        }
+      }
+    }
     $insurge->delete_review($user->uid, $form_state['values']['rev_id']);
   }
 }
@@ -709,6 +808,25 @@ function theme_sopac_get_rating_stars($bnum, $rating = NULL, $show_label = TRUE,
   if ($_POST[$id . '_rating_submit_' . $bnum] && $user->uid) {
     $insurge = sopac_get_insurge();
     $insurge->submit_rating($user->uid, $bnum, $_POST[$id . '_bib_rating_' . $bnum]);
+    // Summer Game
+    if (module_exists('summergame')) {
+      if (variable_get('summergame_points_enabled', 0)) {
+        if ($player = summergame_player_load(array('uid' => $user->uid))) {
+          // Check that player has not already rated this item
+          $res = db_query("SELECT lid FROM sg_ledger WHERE pid = %d AND code_text = 'Rated an Item' " .
+                          "AND description LIKE '%%bnum:%d' LIMIT 1",
+                          $player['pid'], $bnum);
+          $rate_count = db_fetch_object($res);
+          if (!$rate_count->lid) {
+            $points = summergame_player_points($player['pid'], 10, 'Rated an Item',
+                                               'Added a Rating to the Catalog bnum:' . $bnum);
+            $points_link = l($points . ' Summer Game points', 'summergame/player');
+            drupal_set_message("Earned $points_link for rating an item in the catalog");
+          }
+        }
+      }
+    }
+
     if ($post_redirect) {
       header('Location: ' . request_uri());
     }
@@ -749,19 +867,21 @@ function theme_sopac_get_rating_stars($bnum, $rating = NULL, $show_label = TRUE,
   }
   $star_code .= '<input type="hidden" name="' . $id . '_rating_submit_' . $bnum . '" value="1"></form></td><td>';
 
-  if ($show_label) {
+
+if ($show_label) {
     if (!$ratings_info_arr['count']) {
-      $count_msg = t('No votes yet');
+      $count_msg = t('No ratings yet');
     }
     elseif ($ratings_info_arr['count'] == 1) {
-      $count_msg = '1 vote';
+      $count_msg = '1 rating';
     }
     else {
-      $count_msg = $ratings_info_arr['count'] . t(' votes');
+      $count_msg = $ratings_info_arr['count'] . t(' ratings');
     }
     $count_msg .= $login_string;
     $star_code .= '<span id="star_vote_count">(' . $count_msg . ')</span>';
   }
+
 
   $star_code .= '</td></tr></table>';
 

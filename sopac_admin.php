@@ -164,6 +164,21 @@ function sopac_admin() {
     '#required' => TRUE,
   );
 
+  $form['sopac_general']['sopac_catalog_disabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Disable Catalog'),
+    '#default_value' => variable_get('sopac_catalog_disabled', 0),
+    '#description' => t("Selecting this option will disable Requests and the My Account information provided by the catalog. Searches and Social functions will still work."),
+  );
+
+  $form['sopac_general']['sopac_catalog_disabled_message'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Catalog Disabled Message'),
+    '#default_value' => variable_get('sopac_catalog_disabled_message', 'Catalog access is currently disabled'),
+    '#description' => t("This is the message displayed on the My Account page and as a tool tip on Request buttons when catalog is disabled"),
+    '#required' => TRUE,
+  );
+
   $form['sopac_fines'] = array(
     '#type' => 'fieldset',
     '#title' => t('Fines Settings'),
@@ -183,6 +198,15 @@ function sopac_admin() {
     '#title' => t('Enable Payments Management'),
     '#default_value' => variable_get('sopac_payments_enable', 1),
     '#description' => t("Check this box to allow users to pay their fines through SOPAC."),
+  );
+
+  $form['sopac_fines']['sopac_fines_warning_amount'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Fine Warning Amount'),
+    '#default_value' => variable_get('sopac_fines_warning_amount', ''),
+    '#size' => 60,
+    '#maxlength' => 128,
+    '#description' => t("Warning will appear on the My Account page if fines are equal to or greater than this amount"),
   );
 
   $form['sopac_social_features'] = array(
@@ -227,6 +251,14 @@ function sopac_admin() {
       'ORDER BY tag ASC' => t('Alphabeticaly, ascending'),
       'ORDER BY tag DESC' => t('Alphabeticaly, descending'),
     ),
+  );
+
+  $form['sopac_social_features']['sopac_lists_staff_roles'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Lists Staff Roles'),
+    '#default_value' => variable_get('sopac_lists_staff_roles', array()),
+    '#options' => user_roles(TRUE),
+    '#description' => "Select which roles will be marked as STAFF on public list display",
   );
 
   $form['sopac_account'] = array(
@@ -434,5 +466,242 @@ function sopac_setup_user_home_selector() {
 
 // Rebuild menu cache
 function sopac_admin_submit($form, &$form_state) {
-    menu_rebuild();
+  menu_rebuild();
+}
+
+function sopac_admin_moderate_form($form_state, $type = 'reviews', $offset = 0) {
+  include_once('sopac_catalog.php');
+  $insurge = sopac_get_insurge();
+  $locum = sopac_get_locum();
+  $limit = 100; // per page
+
+  if ($form_state['storage']['confirm_ids']) {
+    // CONFIRM FORM
+    $confirm_ids = $form_state['storage']['confirm_ids'];
+    $form['confirm_message'] = array(
+      '#prefix' => '<h2>Are you sure you want to delete these ' . $type . '?</h2><ul>',
+      '#suffix' => '</ul>',
+      '#tree' => TRUE,
+    );
+
+    if ($type == 'reviews') {
+      $reviews = $insurge->get_reviews(NULL, NULL, $confirm_ids, $limit);
+      $form['reviews'] = array(
+        '#type' => 'value',
+        '#value' => $reviews['reviews'],
+      );
+      foreach ($reviews['reviews'] as $review) {
+        $form['confirm_message'][] = array(
+          '#value' => '<li>'. check_plain($review['rev_title']) . "</li>\n",
+        );
+      }
+    }
+    else if ($type == 'tags') {
+      $tags = array();
+      foreach ($confirm_ids as $tag_id) {
+        $tag = $insurge->get_tag($tag_id);
+        $tags[] = $tag;
+        $form['confirm_message'][] = array(
+          '#value' => '<li>'. check_plain($tag['tag']) . "</li>\n",
+        );
+      }
+      $form['tags'] = array(
+        '#type' => 'value',
+        '#value' => $tags,
+      );
+    }
+
+    $form['operation'] = array(
+      '#type' => 'hidden',
+      '#value' => 'delete',
+    );
+    $form['#submit'][] = 'sopac_admin_moderate_delete_confirm_submit';
+    return confirm_form($form,
+                        t('Are you sure you want to delete these ' . $type . '?'),
+                        'admin/settings/sopac/moderate/' . $type, t('This action cannot be undone.'),
+                        t('Delete all'), t('Cancel'));
+  }
+  else {
+    // REVIEW FORM
+    if ($type == 'reviews') {
+      $reviews = $insurge->get_reviews(NULL, NULL, NULL, $limit, intval($offset));
+
+      $checkboxes = array();
+      $form = array();
+      foreach ($reviews['reviews'] as $review) {
+        $bib = $locum->get_bib_item($review['bnum'], TRUE);
+
+        // Hover text for the bib
+        $hover = $bib['title'] . "\n" .
+                 $bib['callnum'] . "\n" .
+                 $bib['pub_info'] . "\n" .
+                 $bib['descr'];
+
+        $checkboxes[$review['rev_id']] = '';
+        $account = user_load(array('uid' => $review['uid']));
+        $form[$review['rev_id']] = array(
+          'user' => array('#value' => l($account->name, 'user/' . $account->uid)),
+          'bnum' => array('#value' => l($bib['title'], 'catalog/record/' . $review['bnum'], array('attributes' => array('title' => $hover)))),
+          'title' => array('#value' =>  $review['rev_title']),
+          'body' => array('#value' => $review['rev_body']),
+          'created' => array('#value' => date("F j, Y, g:i a", $review['rev_create_date'])),
+          'update' => array('#value' => date("F j, Y, g:i a", $review['rev_last_update'])),
+        );
+      }
+      $form['checkboxes'] = array(
+        '#type' => 'checkboxes',
+        '#options' => $checkboxes,
+      );
+      $form['operation'] = array(
+        '#type' => 'hidden',
+        '#value' => 'delete',
+      );
+      $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Delete Selected Reviews'),
+      );
+      $form['next'] = array(
+        '#value' => '<p>' . l('NEXT PAGE', 'admin/settings/sopac/moderate/' . $type . '/' . ($offset + $limit)) . '</p>',
+      );
+      $form['#theme'] = 'sopac_admin_moderate_reviews';
+    }
+    else if ($type == 'tags') {
+      $tags = $insurge->get_tags(1, $limit, $offset);
+      $checkboxes = array();
+      $form = array();
+      foreach ($tags as $tag) {
+        $bib = $locum->get_bib_item($tag['bnum'], TRUE);
+
+        // Hover text for the bib
+        $hover = $bib['title'] . "\n" .
+                 $bib['callnum'] . "\n" .
+                 $bib['pub_info'] . "\n" .
+                 $bib['descr'];
+
+        $checkboxes[$tag['tid']] = '';
+        $account = user_load(array('uid' => $tag['uid']));
+        $form[$tag['tid']] = array(
+          'user' => array('#value' => l($account->name, 'user/' . $account->uid)),
+          'bnum' => array('#value' => l($bib['title'], 'catalog/record/' . $tag['bnum'], array('attributes' => array('title' => $hover)))),
+          'tag' => array('#value' =>  $tag['tag']),
+          'created' => array('#value' => $tag['tag_date']),
+          'public' => array('#value' => $tag['public'] ? 'Public' : 'Private'),
+        );
+      }
+      $form['checkboxes'] = array(
+        '#type' => 'checkboxes',
+        '#options' => $checkboxes,
+      );
+      $form['operation'] = array(
+        '#type' => 'hidden',
+        '#value' => 'delete',
+      );
+      $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => t('Delete Selected Tags'),
+      );
+      $form['next'] = array(
+        '#value' => '<p>' . l('NEXT PAGE', 'admin/settings/sopac/moderate/' . $type . '/' . ($offset + $limit)) . '</p>',
+      );
+      $form['#theme'] = 'sopac_admin_moderate_tags';
+    }
+    return $form;
+  }
+}
+
+function sopac_admin_moderate_form_submit($form, &$form_state) {
+  foreach($form_state['values']['checkboxes'] as $confirm_id) {
+    if ($confirm_id) {
+      $form_state['storage']['confirm_ids'][] = $confirm_id;
+    }
+  }
+  $form_state['rebuild'] = TRUE;
+}
+
+function sopac_admin_moderate_delete_confirm_submit($form, &$form_state) {
+  $insurge = sopac_get_insurge();
+  if ($reviews = $form_state['values']['reviews']) {
+    foreach ($reviews as $review) {
+      if (module_exists('summergame')) {
+        if ($player = summergame_player_load(array('uid' => $review['uid']))) {
+          // Delete the points from the player record if found
+          db_query("DELETE FROM sg_ledger WHERE pid = %d AND code_text = 'Wrote Review' " .
+                   "AND description LIKE '%%bnum:%d' AND description LIKE '%s%%'",
+                   $player['pid'], $review['bnum'], $review['rev_title']);
+          if (db_affected_rows()) {
+            $player_link = l($points . ' Summer Game score card', 'summergame/player/' . $player['pid']);
+            drupal_set_message("Removed points for this review from player's $player_link");
+          }
+        }
+      }
+      $insurge->delete_review($review['uid'], $review['rev_id']);
+    }
+    drupal_goto('admin/settings/sopac/moderate/reviews');
+  }
+  else if ($tags = $form_state['values']['tags']) {
+    if (module_exists('summergame')) {
+      foreach($tags as $tag) {
+        if ($player = summergame_player_load(array('uid' => $tag['uid']))) {
+          // Delete the points from the player record if found
+          db_query("DELETE FROM sg_ledger WHERE pid = %d AND code_text = 'Tagged an Item' " .
+                   "AND description LIKE '%%bnum:%d' AND description LIKE '%%%s%%'",
+                   $player['pid'], $tag['bnum'], $tag['tag']);
+          if (db_affected_rows()) {
+            $player_link = l($points . ' Summer Game score card', 'summergame/player/' . $player['pid']);
+            drupal_set_message("Removed points for this tag from player's $player_link");
+          }
+        }
+        $insurge->delete_user_tag($tag['uid'], $tag['tag'], $tag['bnum']);
+      }
+    }
+    drupal_goto('admin/settings/sopac/moderate/tags');
+  }
+}
+
+function theme_sopac_admin_moderate_reviews($form) {
+  $rows = array();
+  foreach (element_children($form['checkboxes']) as $rev_id) {
+    $rows[] = array(
+      drupal_render($form['checkboxes'][$rev_id]),
+      drupal_render($form[$rev_id]['user']),
+      drupal_render($form[$rev_id]['bnum']),
+      drupal_render($form[$rev_id]['title']),
+      drupal_render($form[$rev_id]['body']),
+      drupal_render($form[$rev_id]['created']),
+      drupal_render($form[$rev_id]['update']),
+    );
+  }
+  $header = array(
+    'Select',
+    'User',
+    'Bib #',
+    'Title',
+    'Body',
+    'Created',
+    'Updated',
+  );
+  return theme('table', $header, $rows) . drupal_render($form);
+}
+
+function theme_sopac_admin_moderate_tags($form) {
+  $rows = array();
+  foreach (element_children($form['checkboxes']) as $tid) {
+    $rows[] = array(
+      drupal_render($form['checkboxes'][$tid]),
+      drupal_render($form[$tid]['user']),
+      drupal_render($form[$tid]['bnum']),
+      drupal_render($form[$tid]['tag']),
+      drupal_render($form[$tid]['created']),
+      drupal_render($form[$tid]['public']),
+    );
+  }
+  $header = array(
+    'Select',
+    'User',
+    'Bib #',
+    'Tag',
+    'Created',
+    'Public',
+  );
+  return theme('table', $header, $rows) . drupal_render($form);
 }

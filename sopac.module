@@ -15,45 +15,45 @@ function sopac_init() {
   global $user, $base_url;
 
   // Handle SSL redirection if it is enabled.
-  if (variable_get('sopac_ssl_enable', 0)) {
-    $protected_uri = preg_match('/^(\/user|\/myaccount|\/login)/', request_uri(), $debug_match);
-    if ($_SERVER['HTTPS'] && !$protected_uri) {
+  if ( variable_get( 'sopac_ssl_enable', 0 ) ) {
+    $protected_uri = preg_match( '/^(\/user|\/myaccount|\/login)/', request_uri(), $debug_match );
+    if ( $_SERVER['HTTPS'] && !$protected_uri ) {
       $new_link = 'http://' . $_SERVER['HTTP_HOST'] . request_uri();
     }
-    elseif (!$_SERVER['HTTPS'] && $protected_uri) {
-      if (variable_get('sopac_ssl_port', 443) != '443') {
-        $nonstd_port = ':' . variable_get('sopac_ssl_port', 443);
+    elseif ( !$_SERVER['HTTPS'] && $protected_uri ) {
+      if ( variable_get( 'sopac_ssl_port', 443 ) != '443' ) {
+        $nonstd_port = ':' . variable_get( 'sopac_ssl_port', 443 );
       }
       $new_link = 'https://' . $_SERVER['HTTP_HOST'] . request_uri();
     }
-    if ($new_link) {
-      header("Location: $new_link");
+    if ( $new_link ) {
+      header( "Location: $new_link" );
     }
   }
 
   // Set up some user-specific values
-  if ($user->uid) {
-    $user->locum_pass = substr($user->pass, 0, 7);
+  if ( $user->uid ) {
+    $user->locum_pass = substr( $user->pass, 0, 7 );
   }
 
   // Assign the various CSS Files
-  drupal_add_css(drupal_get_path('module', 'sopac') .'/sopac.css');
+  drupal_add_css( drupal_get_path( 'module', 'sopac' ) .'/sopac.css' );
 
 }
 
 /**
  * Display help and module information
  *
- * @param string $path Which path of the site we're displaying help
- * @param array $arg Array that holds the current path as would be returned from arg() function
+ * @param string  $path Which path of the site we're displaying help
+ * @param array   $arg  Array that holds the current path as would be returned from arg() function
  * @return string help text for the path
  */
-function sopac_help($path, $arg) {
+function sopac_help( $path, $arg ) {
   $output = '';
-  switch ($path) {
-    case "admin/help#sopac":
-      $output = '<p>'.  t("The Social OPAC&trade; for Drupal") .'</p>';
-      break;
+  switch ( $path ) {
+  case "admin/help#sopac":
+    $output = '<p>'.  t( "The Social OPAC&trade; for Drupal" ) .'</p>';
+    break;
   }
   return $output;
 }
@@ -64,115 +64,115 @@ function sopac_help($path, $arg) {
  * @return array An array of valid permissions for the sopac module
  */
 function sopac_perm() {
-  return array('access user pages', 'administer sopac');
+  return array( 'access user pages', 'administer sopac' );
 }
 
 /**
  * Generate HTML for the sopac block.
  * Uses the following templates: sopac_facet_block.tpl.php
  *
- * @param string $op the operation from the URL
- * @param int $delta offset
+ * @param string  $op    the operation from the URL
+ * @param int     $delta offset
  * @return string block HTML
  */
-function sopac_block($op = 'list', $delta = 0) {
+function sopac_block( $op = 'list', $delta = 0 ) {
   global $locum_results_all, $locum_cfg;
-  $sopac_prefix = variable_get('sopac_url_prefix', 'cat/seek');
+  $sopac_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' );
 
   // listing of blocks, such as on the admin/block page
-  switch ($op) {
+  switch ( $op ) {
 
-    case 'list':
-      $block[0] = array(
-         'info' => t('Catalog Facets'),
-        'pages' => $sopac_prefix . '/search/*',
-      );
-      $block[1] = array(
-         'info' => t('Search Tracker'),
-        'pages' => $sopac_prefix . '/search/*',
-      );
-      $block[2] = array(
-         'info' => t('Catalog Tags'),
-        'pages' => $sopac_prefix . '/*',
-      );
-      $block[3] = array(
-         'info' => t('Catalog Reviews'),
-        'pages' => $sopac_prefix . '/*',
-        'weight' => 1,
-      );
-      $block[4] = array(
-         'info' => t('Item Tags'),
-        'pages' => $sopac_prefix . '/record/*',
-      );
-      $block[5] = array(
-         'info' => t('Item Reviews'),
-        'pages' => $sopac_prefix . '/record/*',
-        'weight' => 1,
-      );
-      $block[6] = array(
-         'info' => t('Personal Tags'),
-        'pages' => 'user/*',
-      );
-      $block[7] = array(
-         'info' => t('Personal Reviews'),
-        'pages' => 'user/*',
-        'weight' => 1,
-      );
-      return $block;
-    case 'view':
-      switch ($delta) {
-        case 0:
-          if ($locum_results_all['num_hits']) {
-            $block_content = theme('sopac_facet_block', $facet_menu, $locum_results_all, $locum_cfg);
-            $block['subject'] = t('Facets');
-            $block['content'] = $block_content;
-          }
-          break;
-        case 1:
-          require_once('sopac_catalog.php');
-          $block['subject'] = t('Your Search');
-          $block_content = sopac_search_block($locum_results_all, $locum_cfg);
-          $block['content'] = $block_content;
-          break;
-        case 2:
-          // SOPAC overview block for patron tags
-          require_once('sopac_social.php');
-          $block['subject'] = t('Popular Tags');
-          $block['content'] = theme('sopac_tag_block', 'overview');
-          break;
-        case 3:
-          // SOPAC overview block for patron reviews
-          require_once('sopac_social.php');
-          $block['subject'] = t('New Reviews');
-          $block['content'] = theme('sopac_review_block', 'overview');
-          break;
-        case 4:
-          // SOPAC item record block for patron tags
-          require_once('sopac_social.php');
-          $block['subject'] = t('Record Tags');
-          $block['content'] = theme('sopac_tag_block', 'record');
-          break;
-        case 5:
-          // SOPAC item record block for patron reviews
-          require_once('sopac_social.php');
-          $block['subject'] = t('Reviews');
-          $block['content'] = theme('sopac_review_block', 'record');
-          break;
-        case 6:
-          // SOPAC personal record block for patron's own tags
-          require_once('sopac_social.php');
-          $block['subject'] = t('My Top Tags');
-          $block['content'] = theme('sopac_tag_block', 'personal');
-          break;
-        case 7:
-          // SOPAC personal record block for patron's own reviews
-          require_once('sopac_social.php');
-          $block['subject'] = t('My Reviews');
-          $block['content'] = theme('sopac_review_block', 'personal');
-          break;
+  case 'list':
+    $block[0] = array(
+      'info' => t( 'Catalog Facets' ),
+      'pages' => $sopac_prefix . '/search/*',
+    );
+    $block[1] = array(
+      'info' => t( 'Search Tracker' ),
+      'pages' => $sopac_prefix . '/search/*',
+    );
+    $block[2] = array(
+      'info' => t( 'Catalog Tags' ),
+      'pages' => $sopac_prefix . '/*',
+    );
+    $block[3] = array(
+      'info' => t( 'Catalog Reviews' ),
+      'pages' => $sopac_prefix . '/*',
+      'weight' => 1,
+    );
+    $block[4] = array(
+      'info' => t( 'Item Tags' ),
+      'pages' => $sopac_prefix . '/record/*',
+    );
+    $block[5] = array(
+      'info' => t( 'Item Reviews' ),
+      'pages' => $sopac_prefix . '/record/*',
+      'weight' => 1,
+    );
+    $block[6] = array(
+      'info' => t( 'Personal Tags' ),
+      'pages' => 'user/*',
+    );
+    $block[7] = array(
+      'info' => t( 'Personal Reviews' ),
+      'pages' => 'user/*',
+      'weight' => 1,
+    );
+    return $block;
+  case 'view':
+    switch ( $delta ) {
+    case 0:
+      if ( $locum_results_all['num_hits'] ) {
+        $block_content = theme( 'sopac_facet_block', $facet_menu, $locum_results_all, $locum_cfg );
+        $block['subject'] = t( 'Facets' );
+        $block['content'] = $block_content;
       }
+      break;
+    case 1:
+      require_once 'sopac_catalog.php';
+      $block['subject'] = t( 'Your Search' );
+      $block_content = sopac_search_block( $locum_results_all, $locum_cfg );
+      $block['content'] = $block_content;
+      break;
+    case 2:
+      // SOPAC overview block for patron tags
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'Popular Tags' );
+      $block['content'] = theme( 'sopac_tag_block', 'overview' );
+      break;
+    case 3:
+      // SOPAC overview block for patron reviews
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'New Reviews' );
+      $block['content'] = theme( 'sopac_review_block', 'overview' );
+      break;
+    case 4:
+      // SOPAC item record block for patron tags
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'Record Tags' );
+      $block['content'] = theme( 'sopac_tag_block', 'record' );
+      break;
+    case 5:
+      // SOPAC item record block for patron reviews
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'Reviews' );
+      $block['content'] = theme( 'sopac_review_block', 'record' );
+      break;
+    case 6:
+      // SOPAC personal record block for patron's own tags
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'My Top Tags' );
+      $block['content'] = theme( 'sopac_tag_block', 'personal' );
+      break;
+    case 7:
+      // SOPAC personal record block for patron's own reviews
+      require_once 'sopac_social.php';
+      $block['subject'] = t( 'My Reviews' );
+      $block['content'] = theme( 'sopac_review_block', 'personal' );
+      break;
+    }
 
-      return $block;
+    return $block;
   }
 }
 
@@ -185,7 +185,7 @@ function sopac_block($op = 'list', $delta = 0) {
  */
 function sopac_menu() {
   global $user;
-  $sopac_prefix = variable_get('sopac_url_prefix', 'cat/seek');
+  $sopac_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' );
 
   $items = array();
 
@@ -193,8 +193,8 @@ function sopac_menu() {
     'title' => 'SOPAC settings',
     'description' => 'SOPAC configuration options',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_admin'),
-    'access arguments' => array('access administration pages'),
+    'page arguments' => array( 'sopac_admin' ),
+    'access arguments' => array( 'access administration pages' ),
     'file' => 'sopac_admin.php',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -202,7 +202,7 @@ function sopac_menu() {
   $items[$sopac_prefix . '/search'] = array(
     'title' => 'Catalog Search',
     'page callback' => 'sopac_catalog_search',
-    'access arguments' => array('access content'),
+    'access arguments' => array( 'access content' ),
     'file' => 'sopac_catalog.php',
     'type' => MENU_CALLBACK,
   );
@@ -210,8 +210,8 @@ function sopac_menu() {
   $items[$sopac_prefix . '/savesearch'] = array(
     'title' => 'Save Search',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_savesearch_form'),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 'sopac_savesearch_form' ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_user.php',
     'type' => MENU_CALLBACK,
   );
@@ -219,7 +219,7 @@ function sopac_menu() {
   $items[$sopac_prefix . '/record/%'] = array(
     'title' => 'Item Record',
     'page callback' => 'sopac_bib_record',
-    'access arguments' => array('access content'),
+    'access arguments' => array( 'access content' ),
     'file' => 'sopac_catalog.php',
     'type' => MENU_CALLBACK,
   );
@@ -227,7 +227,7 @@ function sopac_menu() {
   $items[$sopac_prefix . '/request'] = array(
     'title' => 'Request an Item',
     'page callback' => 'sopac_request_item',
-    'access arguments' => array('access content'),
+    'access arguments' => array( 'access content' ),
     'file' => 'sopac_catalog.php',
     'type' => MENU_CALLBACK,
   );
@@ -235,24 +235,24 @@ function sopac_menu() {
   $items['user/checkouts'] = array(
     'title' => 'My Checkouts',
     'page callback' => 'sopac_checkouts_page',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_user.php',
     'type' => MENU_NORMAL_ITEM,
   );
 
-  if (variable_get('sopac_checkout_history_enable', 0)) {
+  if ( variable_get( 'sopac_checkout_history_enable', 0 ) ) {
     $items['user/checkouts/history'] = array(
       'title' => 'My Checkout History',
       'page callback' => 'sopac_checkout_history_page',
-      'access arguments' => array('access user pages'),
+      'access arguments' => array( 'access user pages' ),
       'file' => 'sopac_user.php',
       'type' => MENU_NORMAL_ITEM,
     );
     $items['user/checkouts/history/opt/%'] = array(
       'title' => 'Change Checkout History Status',
       'page callback' => 'sopac_checkout_history_toggle',
-      'page arguments' => array(4),
-      'access arguments' => array('access user pages'),
+      'page arguments' => array( 4 ),
+      'access arguments' => array( 'access user pages' ),
       'file' => 'sopac_user.php',
       'type' => MENU_CALLBACK,
     );
@@ -260,51 +260,51 @@ function sopac_menu() {
   $items['user/holds'] = array(
     'title' => 'My Holds',
     'page callback' => 'sopac_holds_page',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_user.php',
     'type' => MENU_NORMAL_ITEM,
   );
 
-  if (variable_get('sopac_fines_enable', 1)) {
-      $items['user/fines'] = array(
+  if ( variable_get( 'sopac_fines_enable', 1 ) ) {
+    $items['user/fines'] = array(
       'title' => 'My Fines',
       'page callback' => 'sopac_fines_page',
-      'access arguments' => array('access user pages'),
+      'access arguments' => array( 'access user pages' ),
       'file' => 'sopac_user.php',
       'type' => MENU_NORMAL_ITEM,
     );
 
     $items['user/fines/list'] = array(
       'title' => 'List Fines',
-      'access arguments' => array('access user pages'),
+      'access arguments' => array( 'access user pages' ),
       'weight' => -10,
       'file' => 'sopac_user.php',
       'type' => MENU_DEFAULT_LOCAL_TASK,
     );
 
-    if (variable_get('sopac_payments_enable', 1)) {
+    if ( variable_get( 'sopac_payments_enable', 1 ) ) {
       $items['user/fines/payments'] = array(
-      'title' => 'List Payments',
-      'page callback' => 'sopac_finespaid_page',
-      'access arguments' => array('access user pages'),
-      'file' => 'sopac_user.php',
-      'type' => MENU_LOCAL_TASK,
-    );
+        'title' => 'List Payments',
+        'page callback' => 'sopac_finespaid_page',
+        'access arguments' => array( 'access user pages' ),
+        'file' => 'sopac_user.php',
+        'type' => MENU_LOCAL_TASK,
+      );
 
-    $items['user/fines/pay'] = array(
-      'title' => 'Fines Payment',
-      'page callback' => 'sopac_makepayment_page',
-      'access arguments' => array('access user pages'),
-      'file' => 'sopac_user.php',
-      'type' => MENU_CALLBACK,
-    );
+      $items['user/fines/pay'] = array(
+        'title' => 'Fines Payment',
+        'page callback' => 'sopac_makepayment_page',
+        'access arguments' => array( 'access user pages' ),
+        'file' => 'sopac_user.php',
+        'type' => MENU_CALLBACK,
+      );
     }
   }
 
   $items['user/library'] = array(
     'title' => 'My Library',
     'page callback' => 'sopac_personal_overview_page',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -312,14 +312,14 @@ function sopac_menu() {
   $items['user/library/tags'] = array(
     'title' => 'My Tags',
     'page callback' => 'sopac_tags_page_cloud',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_NORMAL_ITEM,
   );
 
   $items['user/library/tags/cloud'] = array(
     'title' => 'Tag Cloud',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'weight' => -10,
     'file' => 'sopac_social.php',
     'type' => MENU_DEFAULT_LOCAL_TASK,
@@ -328,7 +328,7 @@ function sopac_menu() {
   $items['user/library/tags/list'] = array(
     'title' => 'Tag List',
     'page callback' => 'sopac_tags_page_list',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_LOCAL_TASK,
   );
@@ -336,8 +336,8 @@ function sopac_menu() {
   $items['user/tag/edit'] = array(
     'title' => 'Edit Tag',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_user_tag_edit'),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 'sopac_user_tag_edit' ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -345,8 +345,8 @@ function sopac_menu() {
   $items['user/tag/delete'] = array(
     'title' => 'Delete Tag',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_user_tag_delete'),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 'sopac_user_tag_delete' ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -354,8 +354,8 @@ function sopac_menu() {
   $items['user/tag/show'] = array(
     'title' => 'Tagged Items',
     'page callback' => 'sopac_user_tag_hitlist',
-    'page arguments' => array(3),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 3 ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -363,7 +363,7 @@ function sopac_menu() {
   $items['user/library/ratings'] = array(
     'title' => 'My Ratings',
     'page callback' => 'sopac_ratings_page',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -371,8 +371,8 @@ function sopac_menu() {
   $items['user/library/reviews'] = array(
     'title' => 'My Reviews',
     'page callback' => 'sopac_review_page',
-    'access arguments' => array('access user pages'),
-    'page arguments' => array('personal'),
+    'access arguments' => array( 'access user pages' ),
+    'page arguments' => array( 'personal' ),
     'file' => 'sopac_social.php',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -380,7 +380,7 @@ function sopac_menu() {
   $items['user/library/searches'] = array(
     'title' => 'My Searches',
     'page callback' => 'sopac_saved_searches_page',
-    'access arguments' => array('access user pages'),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_user.php',
     'type' => MENU_NORMAL_ITEM,
   );
@@ -388,8 +388,8 @@ function sopac_menu() {
   $items['review/delete'] = array(
     'title' => 'Delete Review',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_delete_review_form'),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 'sopac_delete_review_form' ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -397,8 +397,8 @@ function sopac_menu() {
   $items['review/edit'] = array(
     'title' => 'Edit Review',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('sopac_review_form'),
-    'access arguments' => array('access user pages'),
+    'page arguments' => array( 'sopac_review_form' ),
+    'access arguments' => array( 'access user pages' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -406,8 +406,8 @@ function sopac_menu() {
   $items['review/view'] = array(
     'title' => 'Read Review',
     'page callback' => 'sopac_review_page',
-    'access arguments' => array('access content'),
-    'page arguments' => array('single'),
+    'access arguments' => array( 'access content' ),
+    'page arguments' => array( 'single' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -415,8 +415,8 @@ function sopac_menu() {
   $items['review/user'] = array(
     'title' => 'User Reviews',
     'page callback' => 'sopac_review_page',
-    'access arguments' => array('access content'),
-    'page arguments' => array('user'),
+    'access arguments' => array( 'access content' ),
+    'page arguments' => array( 'user' ),
     'file' => 'sopac_social.php',
     'type' => MENU_CALLBACK,
   );
@@ -431,83 +431,83 @@ function sopac_theme() {
   return array(
     'sopac_results' => array(
       'template' => 'sopac-results',
-      'arguments' => array('result_info' => NULL, 'hitlist_pager' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL),
+      'arguments' => array( 'result_info' => NULL, 'hitlist_pager' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL ),
     ),
     'sopac_results_rss' => array(
       'template' => 'sopac-results-rss',
-      'arguments' => array('result_info' => NULL, 'search_term' => NULL, 'search_type' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL),
+      'arguments' => array( 'result_info' => NULL, 'search_term' => NULL, 'search_type' => NULL, 'hitlist_content' => NULL, 'locum_result' => NULL, 'locum_config' => NULL ),
     ),
     'sopac_results_hitlist' => array(
       'template' => 'sopac-results-hitlist',
-      'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL),
+      'arguments' => array( 'result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL ),
     ),
     'sopac_results_hitlist_rss' => array(
       'template' => 'sopac-results-hitlist-rss',
-      'arguments' => array('result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL),
+      'arguments' => array( 'result_num' => NULL, 'cover_img_url' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'no_circ' => NULL ),
     ),
     'sopac_results_nohits' => array(
       'template' => 'sopac-results-nohits',
-      'arguments' => array('locum_result' => NULL, 'locum_config' => NULL),
+      'arguments' => array( 'locum_result' => NULL, 'locum_config' => NULL ),
     ),
     'sopac_record' => array(
       'template' => 'sopac-record',
-      'arguments' => array('item' => NULL, 'item_status' => NULL, 'locum_config' => NULL, 'no_circ' => NULL, 'locum' => NULL, 'rev_arr' => NULL, 'rev_form' => NULL),
+      'arguments' => array( 'item' => NULL, 'item_status' => NULL, 'locum_config' => NULL, 'no_circ' => NULL, 'locum' => NULL, 'rev_arr' => NULL, 'rev_form' => NULL ),
     ),
     'sopac_review' => array(
       'template' => 'sopac-review',
-      'arguments' => array('user' => NULL, 'title' => NULL, 'rev_arr' => NULL, 'page_type' => NULL, 'rev_form' => NULL, 'ratings' => NULL, 'no_rev_msg' => NULL, 'bib_info' => NULL),
+      'arguments' => array( 'user' => NULL, 'title' => NULL, 'rev_arr' => NULL, 'page_type' => NULL, 'rev_form' => NULL, 'ratings' => NULL, 'no_rev_msg' => NULL, 'bib_info' => NULL ),
     ),
     'sopac_facet_block' => array(
       'template' => 'sopac-facet-block',
-      'arguments' => array('facet_menu' => NULL, 'locum_result' => NULL, 'locum_config' => NULL),
+      'arguments' => array( 'facet_menu' => NULL, 'locum_result' => NULL, 'locum_config' => NULL ),
     ),
     'sopac_search_block' => array(
       'template' => 'sopac-search-block',
-      'arguments' => array('search' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'user' => NULL),
+      'arguments' => array( 'search' => NULL, 'locum_result' => NULL, 'locum_config' => NULL, 'user' => NULL ),
     ),
     'sopac_request' => array(
       'template' => 'sopac-request',
-      'arguments' => array('request_result_msg' => NULL, 'request_error_msg' => NULL, 'item_form' => NULL, 'bnum' => NULL),
+      'arguments' => array( 'request_result_msg' => NULL, 'request_error_msg' => NULL, 'item_form' => NULL, 'bnum' => NULL ),
     ),
     'sopac_fines' => array(
       'template' => 'sopac-fines',
-      'arguments' => array('notice' => NULL, 'fine_table' => NULL, 'user' => NULL, 'payment_form' => NULL),
+      'arguments' => array( 'notice' => NULL, 'fine_table' => NULL, 'user' => NULL, 'payment_form' => NULL ),
     ),
     'sopac_pat_overview' => array(
       'template' => 'sopac-pat-overview',
-      'arguments' => array('review_display' => NULL, 'ratings_chunk' => NULL, 'tag_cloud' => NULL),
+      'arguments' => array( 'review_display' => NULL, 'ratings_chunk' => NULL, 'tag_cloud' => NULL ),
     ),
     'sopac_ratings_page' => array(
       'template' => 'sopac-ratings-page',
-      'arguments' => array('ratings_arr' => NULL),
+      'arguments' => array( 'ratings_arr' => NULL ),
     ),
     'sopac_tags_page' => array(
       'template' => 'sopac-tags-page',
-      'arguments' => array('tags_arr' => NULL),
+      'arguments' => array( 'tags_arr' => NULL ),
     ),
     'sopac_user_tag_hitlist' => array(
       'template' => 'sopac-user-tag-hitlist',
-      'arguments' => array('tag' => NULL, 'pager_body' => NULL, 'result_body' => NULL),
+      'arguments' => array( 'tag' => NULL, 'pager_body' => NULL, 'result_body' => NULL ),
     ),
     'sopac_tag_block' => array(
-      'arguments' => array('block_type' => NULL),
+      'arguments' => array( 'block_type' => NULL ),
     ),
     'sopac_review_block' => array(
-      'arguments' => array('block_type' => NULL),
+      'arguments' => array( 'block_type' => NULL ),
     ),
     'sopac_tag_cloud' => array(
-      'arguments' => array('tags' => NULL, 'cloud_type' => 'catalog', 'min_size' => 10, 'max_size' => 24, 'wraplength' => 19),
+      'arguments' => array( 'tags' => NULL, 'cloud_type' => 'catalog', 'min_size' => 10, 'max_size' => 24, 'wraplength' => 19 ),
     ),
     'sopac_get_rating_stars' => array(
-      'arguments' => array('bnum' => NULL, 'rating' => NULL, 'show_label' => TRUE, 'post_redirect' => FALSE, 'id' => 'default'),
+      'arguments' => array( 'bnum' => NULL, 'rating' => NULL, 'show_label' => TRUE, 'post_redirect' => FALSE, 'id' => 'default' ),
     ),
     'sopac_user_holds_list' => array(
       'template' => 'sopac-user-holds-list',
-      'arguments' => array('data' => array()),
+      'arguments' => array( 'data' => array() ),
     ),
     'sopac_user_holds_list_multirow' => array(
       'template' => 'sopac-user-holds-list-multirow',
-      'arguments' => array('data' => array()),
+      'arguments' => array( 'data' => array() ),
     ),
   );
 }
@@ -515,59 +515,75 @@ function sopac_theme() {
 /**
  * Preprocess function (apparently needs to be in module page so found by theme register)
  *
- * @param array $variables
+ * @param array   $variables
  */
-function sopac_preprocess_sopac_user_holds_list(&$variables) {
-  $variables['freezes_enabled'] = variable_get('sopac_hold_freezes_enable', 1);
-  form_theme_bridge_parse_data_for_layout($variables);
+function sopac_preprocess_sopac_user_holds_list( &$variables ) {
+  $variables['freezes_enabled'] = variable_get( 'sopac_hold_freezes_enable', 1 );
+  form_theme_bridge_parse_data_for_layout( $variables );
 }
 
 /**
  * Preprocess function (apparently needs to be in module page so found by theme register)
  *
- * @param array $variables
+ * @param array   $variables
  */
-function sopac_preprocess_sopac_user_holds_list_multirow(&$variables) {
-  form_theme_bridge_parse_data_for_layout($variables);
+function sopac_preprocess_sopac_user_holds_list_multirow( &$variables ) {
+  form_theme_bridge_parse_data_for_layout( $variables );
 }
 
 /**
  * Implementation of hook_user()
  */
-function sopac_user($op, &$edit, &$account, $category = NULL) {
+function sopac_user( $op, &$edit, &$account, $category = NULL ) {
 
-  require_once('sopac_user.php');
-  switch ($op) {
-    case 'submit':
-      sopac_update_locum_acct($op, $edit, $account);
-      break;
+  require_once 'sopac_user.php';
+  switch ( $op ) {
+  case 'submit':
+    sopac_update_locum_acct( $op, $edit, $account );
+    break;
 
-    case 'view':
-      sopac_user_view($op, $edit, $account, $category);
-      break;
+  case 'view':
+    sopac_user_view( $op, $edit, $account, $category );
+    break;
 
-    case 'delete':
-      // TODO : Clean-up
-      break;
+  case 'delete':
+    // TODO : Clean-up
+    break;
   }
 }
 
 /**
  * Checks to see if $cardnum has been verified
  *
- * @param string $cardnum Library patron barcode/card number
+ * @param string  $user_obj Drupal $user object
  * @return boolean True if patron has verified the barcode, False if not.
  */
-function sopac_bcode_isverified(&$user_obj) {
-  if (!$user_obj->profile_pref_cardnum) {
-    profile_load_profile($user_obj);
+function sopac_bcode_isverified( &$user_obj ) {
+  if ( !$user_obj->profile_pref_cardnum ) {
+    profile_load_profile( $user_obj );
   }
-  if (!$user_obj->profile_pref_cardnum) {
+  if ( !$user_obj->profile_pref_cardnum ) {
     return FALSE;
   }
-  $db_obj = db_fetch_object(db_query("SELECT COUNT(*) AS vfy FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user_obj->uid, $user_obj->profile_pref_cardnum));
-  if ($db_obj->vfy > 0) {
+  $db_obj = db_fetch_object( db_query( "SELECT COUNT(*) AS vfy FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user_obj->uid, $user_obj->profile_pref_cardnum ) );
+  if ( $db_obj->vfy > 0 ) {
     return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function sopac_cnum_to_pnum( &$user_obj ) {
+  if ( !$user_obj->profile_pref_cardnum ) {
+    profile_load_profile( $user_obj );
+  }
+  if ( !$user_obj->profile_pref_cardnum ) {
+    return FALSE;
+  }
+  $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user_obj->uid, $user_obj->profile_pref_cardnum ) );
+  if ( $db_obj->pnum ) {
+    return $db_obj->pnum;
   }
   else {
     return FALSE;
@@ -578,23 +594,23 @@ function sopac_bcode_isverified(&$user_obj) {
  * Creates an external function to formulate a search form by doing the neccesary includes.
  * An example for using this might be calling this function from within a node.
  *
- * @param string $form_type Can be "basic", "advanced", or "both" (default)
+ * @param string  $form_type Can be "basic", "advanced", or "both" (default)
  * @return string Drupal-themed and generated search form
  */
-function sopac_search_form($form_type = 'both') {
+function sopac_search_form( $form_type = 'both' ) {
 
-  require_once('sopac_catalog.php');
-  switch (strtolower(trim($form_type))) {
-    case 'basic':
-      $search_form = drupal_get_form('sopac_search_form_basic');
-      break;
-    case 'advanced':
-      $search_form = drupal_get_form('sopac_search_form_adv');
-      break;
-    case 'both':
-    default:
-      $search_form = drupal_get_form('sopac_search_form_basic') . drupal_get_form('sopac_search_form_adv');
-      break;
+  require_once 'sopac_catalog.php';
+  switch ( strtolower( trim( $form_type ) ) ) {
+  case 'basic':
+    $search_form = drupal_get_form( 'sopac_search_form_basic' );
+    break;
+  case 'advanced':
+    $search_form = drupal_get_form( 'sopac_search_form_adv' );
+    break;
+  case 'both':
+  default:
+    $search_form = drupal_get_form( 'sopac_search_form_basic' ) . drupal_get_form( 'sopac_search_form_adv' );
+    break;
   }
   return $search_form;
 }
@@ -604,9 +620,9 @@ function sopac_search_form($form_type = 'both') {
  *
  * @return string cleaned-up URI.
  */
-function utf8_urldecode($str) {
-  $str = preg_replace("/%u([0-9a-f]{3,4})/i", "&#x\\1;", urldecode($str));
-  return html_entity_decode($str, NULL, 'UTF-8');
+function utf8_urldecode( $str ) {
+  $str = preg_replace( "/%u([0-9a-f]{3,4})/i", "&#x\\1;", urldecode( $str ) );
+  return html_entity_decode( $str, NULL, 'UTF-8' );
 }
 
 /**
@@ -616,23 +632,23 @@ function utf8_urldecode($str) {
  *
  * @return array Array of URI elements
  */
-function sopac_parse_uri($strip_prefix = TRUE) {
+function sopac_parse_uri( $strip_prefix = TRUE ) {
 
   // Strip out everything in the URI up through SOPAC's prefix
-  if ($strip_prefix) {
-    $args_raw = substr($_GET['q'], strlen(variable_get('sopac_url_prefix', 'cat/seek')));
+  if ( $strip_prefix ) {
+    $args_raw = substr( $_GET['q'], strlen( variable_get( 'sopac_url_prefix', 'cat/seek' ) ) );
   }
   else {
     $args_raw = $_GET['q'];
   }
 
-  $uri_array = explode('/', $args_raw);
-  if ($uri_array[0] == '') {
-    array_shift($uri_array);
+  $uri_array = explode( '/', $args_raw );
+  if ( $uri_array[0] == '' ) {
+    array_shift( $uri_array );
   }
 
-  foreach ($uri_array as $uri_elem) {
-    $result[] = urldecode(trim($uri_elem));
+  foreach ( $uri_array as $uri_elem ) {
+    $result[] = urldecode( trim( $uri_elem ) );
   }
 
   return $result;
@@ -642,52 +658,52 @@ function sopac_parse_uri($strip_prefix = TRUE) {
  * Returns an array of GET variables, allowing for the ability to override them
  * It also parses getvars with multiple values delimited by |
  *
- * @param array $override Optional override option that will override actual GET variables
+ * @param array   $override Optional override option that will override actual GET variables
  * @return boolean|array If there are GET vars, an array of GET vars is returned, or else FALSE
  */
-function sopac_parse_get_vars($override = array()) {
+function sopac_parse_get_vars( $override = array() ) {
 
   // TODO - Hard-coding this is not the best way to do it, but for now it is what it is... Revisit for 2.2?
-  $implode = array('search_format', 'pub_year', 'location', 'collection', 'facet_series', 'facet_lang', 'facet_year', 'facet_decade', 'age', 'facet_subject');
+  $implode = array( 'search_format', 'pub_year', 'location', 'collection', 'facet_series', 'facet_lang', 'facet_year', 'facet_decade', 'age', 'facet_subject' );
 
-  foreach ($_GET as $name => $value) {
-    if (in_array($name, $implode)) {
-      $vars[$name] = explode('|', trim($value));
-    } else if ($name != 'q') {
-      // don't include the drupal path variable
-      $vars[$name] = $value;
-    }
+  foreach ( $_GET as $name => $value ) {
+    if ( in_array( $name, $implode ) ) {
+      $vars[$name] = explode( '|', trim( $value ) );
+    } else if ( $name != 'q' ) {
+        // don't include the drupal path variable
+        $vars[$name] = $value;
+      }
   }
 
-  foreach ($override as $okey => $ovar) {
-    if ($ovar) {
+  foreach ( $override as $okey => $ovar ) {
+    if ( $ovar ) {
       $vars[$okey] = $ovar;
     }
     else {
-      unset($vars[$okey]);
+      unset( $vars[$okey] );
     }
   }
 
-  return count($vars) ? $vars : FALSE;
+  return count( $vars ) ? $vars : FALSE;
 }
 
 /**
  * Takes an array and creates page variable.  It's basically the reverse of sopac_parse_get_vars()
  *
- * @param array Array of variables to formulate
+ * @param array   Array of variables to formulate
  * @return string GET variable string
  */
-function sopac_make_pagevars($getvars) {
+function sopac_make_pagevars( $getvars ) {
   $pagevars = '';
 
-  if (is_array($getvars) && count($getvars)) {
-    foreach ($getvars as $key => $var) {
-      if (is_array($var)) {
-        $var = implode('|', $var);
+  if ( is_array( $getvars ) && count( $getvars ) ) {
+    foreach ( $getvars as $key => $var ) {
+      if ( is_array( $var ) ) {
+        $var = implode( '|', $var );
       }
       $pagevars .= $key . '=' . $var . '&';
     }
-    $pagevars = substr($pagevars, 0, -1);
+    $pagevars = substr( $pagevars, 0, -1 );
   }
   return $pagevars;
 
@@ -696,29 +712,29 @@ function sopac_make_pagevars($getvars) {
 /**
  * Takes a url, and a new varname/value pair and updates a url
  *
- * @param string $url URL
- * @param string $uKey Variable name
- * @param string $uVal Variable value
+ * @param string  $url  URL
+ * @param string  $uKey Variable name
+ * @param string  $uVal Variable value
  * @return string New URL with variable
  */
-function sopac_update_url($url, $uKey, $uVal) {
-  $Qurl = explode("?", $url);
-  $arr = explode("&", $Qurl[1]);
+function sopac_update_url( $url, $uKey, $uVal ) {
+  $Qurl = explode( "?", $url );
+  $arr = explode( "&", $Qurl[1] );
   $r = '';
   $set = 0;
-  for ($i = 0; $i < sizeof($arr); $i++) {
-    $arr2 = explode("=", $arr[$i]);
-    if ($arr2[0] == $uKey) {
+  for ( $i = 0; $i < sizeof( $arr ); $i++ ) {
+    $arr2 = explode( "=", $arr[$i] );
+    if ( $arr2[0] == $uKey ) {
       $arr2[1] = $uVal;
       $set = 1;
     }
     $r .= $arr2[0] . "=" . $arr2[1] . "&";
   }
-  if ($set == 0) {
+  if ( $set == 0 ) {
     $r .= $uKey . "=" . $uVal;
   }
   else {
-    $r = rtrim($r, "&");
+    $r = rtrim( $r, "&" );
   }
   return $Qurl[0] . '?' . $r;
 }
@@ -726,28 +742,28 @@ function sopac_update_url($url, $uKey, $uVal) {
 /**
  * Function to automate the handling of the pager system.
  */
-function sopac_pager_init($total, $element = 0, $limit = 10) {
+function sopac_pager_init( $total, $element = 0, $limit = 10 ) {
   global $pager_page_array, $pager_total, $pager_total_items;
-  $page = isset($_GET['page']) ? $_GET['page'] : '';
+  $page = isset( $_GET['page'] ) ? $_GET['page'] : '';
 
   // Convert comma-separated $page to an array, used by other functions.
-  $pager_page_array = explode(',', $page);
+  $pager_page_array = explode( ',', $page );
 
   // We calculate the total of pages as ceil(items / limit).
   $pager_total_items[$element] = $total;
-  $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
-  $pager_page_array[$element] = max(0, min((int)$pager_page_array[$element], ((int)$pager_total[$element]) - 1));
+  $pager_total[$element] = ceil( $pager_total_items[$element] / $limit );
+  $pager_page_array[$element] = max( 0, min( (int)$pager_page_array[$element], ( (int)$pager_total[$element] ) - 1 ) );
 }
 
 function sopac_user_block_disp_query() {
   global $user;
 
-  $user_views = array('fines', 'library', 'holds', 'checkouts', 'tag');
-  $uri_arr = explode('/', $_GET['q']);
-  if ($uri_arr[0] == 'user' && in_array($uri_arr[1], $user_views)) {
+  $user_views = array( 'fines', 'library', 'holds', 'checkouts', 'tag' );
+  $uri_arr = explode( '/', $_GET['q'] );
+  if ( $uri_arr[0] == 'user' && in_array( $uri_arr[1], $user_views ) ) {
     return TRUE;
   }
-  return $user->uid && arg(0) == 'user' && is_numeric(arg(1)) && arg(1) == $user->uid;
+  return $user->uid && arg( 0 ) == 'user' && is_numeric( arg( 1 ) ) && arg( 1 ) == $user->uid;
   return FALSE;
 }
 
@@ -759,8 +775,8 @@ function sopac_get_branch_options() {
 
 function sopac_cron() {
   // Part of supporting user home branch in multibranch situation
-  if (variable_get('sopac_home_branch_enable', FALSE) && !variable_get('sopac_home_selector_options', FALSE)) {
-    require_once('sopac_admin.php');
+  if ( variable_get( 'sopac_home_branch_enable', FALSE ) && !variable_get( 'sopac_home_selector_options', FALSE ) ) {
+    require_once 'sopac_admin.php';
     sopac_setup_user_home_selector();
   }
   menu_rebuild();
@@ -769,26 +785,26 @@ function sopac_cron() {
 /**
  * Return an object which is a locum
  *
- * @param string $type
+ * @param string  $type
  * @param Boolean $refresh
  * @return object
  */
-function sopac_get_locum($type = 'client', $refresh = FALSE) {
+function sopac_get_locum( $type = 'client', $refresh = FALSE ) {
   static $instances = array();
 
-  $new_type = !array_key_exists($type, $instances);
-  if ($new_type) {
-    $path = trim(variable_get('sopac_locum_path', '/usr/local/lib/locum'));
-    if ($path[0] != '/') {
+  $new_type = !array_key_exists( $type, $instances );
+  if ( $new_type ) {
+    $path = trim( variable_get( 'sopac_locum_path', '/usr/local/lib/locum' ) );
+    if ( $path[0] != '/' ) {
       $path = '/' . $path;
     }
-    if (substr($path, -1) != '/') {
+    if ( substr( $path, -1 ) != '/' ) {
       $path .= '/';
     }
     $path .= $type == 'locum' ? '' : 'locum-';
-    include_once($path . $type . '.php');
+    include_once $path . $type . '.php';
   }
-  if ($new_type || $refresh) {
+  if ( $new_type || $refresh ) {
     $class_name = $type == 'locum' ? '' : 'locum_';
     $class_name .= $type;
     $instances[$type] = new $class_name();
@@ -799,26 +815,26 @@ function sopac_get_locum($type = 'client', $refresh = FALSE) {
 /**
  * Return an object which is a insurge
  *
- * @param string $type
+ * @param string  $type
  * @param Boolean $refresh
  * @return object
  */
-function sopac_get_insurge($type = 'client', $refresh = FALSE) {
+function sopac_get_insurge( $type = 'client', $refresh = FALSE ) {
   static $instances = array();
 
-  $new_type = !array_key_exists($type, $instances);
-  if ($new_type) {
-    $path = trim(variable_get('sopac_insurge_path', '/usr/local/lib/insurge'));
-    if ($path[0] != '/') {
+  $new_type = !array_key_exists( $type, $instances );
+  if ( $new_type ) {
+    $path = trim( variable_get( 'sopac_insurge_path', '/usr/local/lib/insurge' ) );
+    if ( $path[0] != '/' ) {
       $path = '/' . $path;
     }
-    if (substr($path, -1) != '/') {
+    if ( substr( $path, -1 ) != '/' ) {
       $path .= '/';
     }
     $path .= $type == 'insurge' ? '' : 'insurge-';
-    include_once($path . $type . '.php');
+    include_once $path . $type . '.php';
   }
-  if ($new_type || $refresh) {
+  if ( $new_type || $refresh ) {
     $class_name = $type == 'insurge' ? '' : 'insurge_';
     $class_name .= $type;
     $instances[$type] = new $class_name();
@@ -829,18 +845,18 @@ function sopac_get_insurge($type = 'client', $refresh = FALSE) {
 /**
  * implementation of hook_form_alter for user_profile_form
  */
-function sopac_form_user_profile_form_alter(&$form, &$form_state) {
-  if (!in_array($form['#validate'], 'sopac_user_profile_form_validate')) {
-  	array_unshift($form['#validate'], 'sopac_user_profile_form_validate');
+function sopac_form_user_profile_form_alter( &$form, &$form_state ) {
+  if ( !in_array( $form['#validate'], 'sopac_user_profile_form_validate' ) ) {
+    array_unshift( $form['#validate'], 'sopac_user_profile_form_validate' );
   }
 }
 
 /**
  * validate user_profile_form
  *
- * @param array $form
- * @param array $form_state
+ * @param array   $form
+ * @param array   $form_state
  */
-function sopac_user_profile_form_validate(&$form, &$form_state) {
-  $form_state['values']['profile_pref_cardnum'] = trim($form_state['values']['profile_pref_cardnum']);
+function sopac_user_profile_form_validate( &$form, &$form_state ) {
+  $form_state['values']['profile_pref_cardnum'] = trim( $form_state['values']['profile_pref_cardnum'] );
 }

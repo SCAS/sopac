@@ -55,6 +55,12 @@ function sopac_schema() {
         'length' => 24,
         'description' => t('Library card number.'),
       ),
+      'pnum' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'length' => 10,
+        'description' => t('Unique persistent patron ID.'),
+      ),
       'verified' => array(
         'type' => 'int',
         'not null' => TRUE,
@@ -70,6 +76,7 @@ function sopac_schema() {
     'indexes' => array(
       'uid' => array('uid'),
       'cardnum' => array('cardnum'),
+      'pnum' => array('pnum'),
       'verified' => array('verified'),
     ),
   );

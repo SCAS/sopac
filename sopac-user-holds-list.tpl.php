@@ -2,9 +2,7 @@
 <table cellspacing="0" class="sticky-enabled sticky-table" id="patroninfo">
   <thead class="tableHeader-processed">
     <tr>
-    <?php if ($freezes_enabled) { ?>
       <th>Delete</th>
-    <?php } ?>
       <th>Title</th>
       <th>Status</th>
       <th>Pickup Location</th>
@@ -20,11 +18,9 @@
     $zebra = $zebra == 'odd' ? 'even' : 'odd';
 ?>
     <tr class="<?php print $zebra ?>">
-    <?php if ($freezes_enabled) { ?>
       <td><?php print $hold['cancel'] ?></td>
-    <?php } ?>
       <td><?php print $hold['title_link'] ?></td>
-      <td><?php print $hold['status'] ?> in queue</td>
+      <td><?php print $hold['status'] ?></td>
       <td><?php print $hold['pickup'] ?></td>
     <?php if ($freezes_enabled) { ?>
       <td><?php print $hold['freeze'] ?></td>
@@ -37,7 +33,7 @@
     <?php if ($freezes_enabled) { ?>
       <td colspan="5">
     <?php } else { ?>
-      <td colspan="3">
+      <td colspan="4">
     <?php } ?>
         <?php print $submit ?>
       </td>

@@ -40,7 +40,7 @@ function sopac_user_view( $op, &$edit, &$account, $category = NULL ) {
 
   // Patron holds (bottom of the page)
   if ( $account->valid_card && $account->bcode_verify ) {
-    $holds_table = drupal_get_form( 'sopac_user_holds_form' );
+    $holds_table = drupal_get_form( 'sopac_user_holds_form', $account );
     if ( $holds_table ) {
       $result['patronholds']['#title'] = t( 'Requested Items' );
       $result['patronholds']['#weight'] = 3;
@@ -50,7 +50,7 @@ function sopac_user_view( $op, &$edit, &$account, $category = NULL ) {
   }
 
   // Commit the page content
-  $account->content[] = $result;
+  $account->content = array_merge($account->content, $result);
 
   // The Summary is not really needed.
   if ( variable_get( 'sopac_history_hide', 1 ) ) {
@@ -87,25 +87,48 @@ function sopac_user_info_table( &$account, &$locum ) {
     if ( $userinfo['cardnum'] ) {
       $bcode_verify = sopac_bcode_isverified( $account );
       $pnum = $userinfo['pnum'];
-      if ( $pnum != sopac_cnum_to_pnum( $account ) ) {
+      $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $account->uid, $cardnum ) );
+      $drupal_pnum = $db_obj->pnum;
+      if ( $pnum != $drupal_pnum ) {
         db_query( "UPDATE {sopac_card_verify} SET pnum = '%s' WHERE uid = %d AND cardnum = '%s'", $pnum, $account->uid, $cardnum );
       }
     } else {
-
+      $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s'", $account->uid, $cardnum ) );
+      if ( $db_obj->pnum ) {
+        $pnum = $db_obj->pnum;
+        $userinfo = $locum->get_patron_info( $pnum );
+        if ( $userinfo['cardnum'] ) {
+          $account->profile_pref_cardnum = $userinfo['cardnum'];
+          $cardnum = $account->profile_pref_cardnum;
+          $edit = array( 'profile_pref_cardnum' => $cardnum );
+          user_save( $account, $edit, 'Preferences' );
+          db_query( "UPDATE {sopac_card_verify} SET cardnum = '%s' WHERE uid = %d AND pnum = '%s'", $cardnum, $account->uid, $pnum );
+          $bcode_verify = sopac_bcode_isverified( $account );
+        } else {
+          $edit = array( 'profile_pref_cardnum' => NULL );
+          user_save( $account, $edit, 'Preferences' );
+          db_query( "DELETE FROM {sopac_card_verify} WHERE uid = %d AND pnum = '%s'", $account->uid, $pnum );
+          unset( $cardnum );
+          unset( $pnum );
+          unset( $userinfo );
+        }
+      } else {
+        $edit = array( 'profile_pref_cardnum' => NULL );
+        user_save( $account, $edit, 'Preferences' );
+        db_query( "DELETE FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s'", $account->uid, $cardnum );
+        unset( $cardnum );
+        unset( $userinfo );
+      }
     }
   }
 
   if ( $cardnum && $pnum ) {
     $bcode_verify = sopac_bcode_isverified( $account );
-    $cardnum_link = l( $cardnum, 'user/' . $account->uid . '/edit/Preferences' );
 
     if ( $bcode_verify ) {
-
       $account->bcode_verify = TRUE;
     }
     else {
-      // Check if barcode is valid
-      //// If no, delete the barcode
       $account->bcode_verify = FALSE;
     }
     if ( $userinfo['pnum'] ) {
@@ -121,6 +144,7 @@ function sopac_user_info_table( &$account, &$locum ) {
         $rows[] = array( array( 'data' => t( 'Patron Name' ), 'class' => 'attr_name' ), $userinfo['name'] );
       }
       if ( variable_get( 'sopac_lcard_enable', 1 ) ) {
+        $cardnum_link = l( $cardnum, 'user/' . $account->uid . '/edit/Preferences' );
         $rows[] = array( array( 'data' => t( 'Library Card Number' ), 'class' => 'attr_name' ), $cardnum_link );
       }
       // Add row for home branch if appropriate
@@ -218,7 +242,7 @@ function sopac_user_chkout_table( &$account, &$locum, $max_disp = NULL ) {
     if ( !count( $checkouts ) ) {
       return t( 'No items checked out.' );
     }
-    $header = array( '', t( 'Title' ), t( 'Due Date' ) );
+    $header = array( '', t( 'Title' ), t( 'Due Date&nbsp;&nbsp;&nbsp;&nbsp; ' ) );
     foreach ( $checkouts as $co ) {
       if ( $renew_status[$co['inum']]['error'] ) {
         $duedate = '<span style="color: red;">' . $renew_status[$co['inum']]['error'] . '</span>';
@@ -255,11 +279,13 @@ function sopac_user_chkout_table( &$account, &$locum, $max_disp = NULL ) {
  *
  * @return string
  */
-function sopac_user_holds_form() {
-  global $user;
-  $form = array();
+function sopac_user_holds_form($form_state, $account = NULL, $max_disp = NULL) {
+  if (!$account) {
+    global $user;
+    $account = user_load($user->uid);
+  }
 
-  $cardnum = $user->profile_pref_cardnum;
+  $cardnum = $account->profile_pref_cardnum;
   $ils_pass = $user->locum_pass;
   $locum = sopac_get_locum();
   $holds = $locum->get_patron_holds( $cardnum, $ils_pass );
@@ -279,7 +305,9 @@ function sopac_user_holds_form() {
 
   $form = array(
     '#theme' => 'form_theme_bridge',
-    '#layout_theme' => 'sopac_user_holds_list',
+    '#bridge_to_theme' => 'sopac_user_holds_list',
+    '#cardnum' => $cardnum,
+    '#ils_pass' => $ils_pass,
   );
 
   $sopac_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' ) . '/record/';
@@ -289,16 +317,24 @@ function sopac_user_holds_form() {
     '#tree' => TRUE,
     '#iterable' => TRUE,
   );
+
   foreach ( $holds as $hold ) {
     $bnum = $hold['bnum'];
     $hold_to_theme = array();
+    $varname = $hold['varname'] ? $hold['varname'] : $bnum;
 
-    if ( $freezes_enabled ) {
-      $hold_to_theme['cancel'] = array(
-        '#type' => 'checkbox',
-        '#default_value' => FALSE,
-      );
-    }
+    $hold_to_theme['bnum'] = array(
+      '#type' => 'value',
+      '#value' => $bnum,
+    );
+    $hold_to_theme['title'] = array(
+      '#type' => 'value',
+      '#value' => $hold['title'],
+    );
+    $hold_to_theme['cancel'] = array(
+      '#type' => 'checkbox',
+      '#default_value' => FALSE,
+    );
     $hold_to_theme['title_link'] = array(
       '#type' => 'markup',
       '#value' => l( t( $hold['title'] ), $sopac_prefix . $bnum ),
@@ -326,7 +362,7 @@ function sopac_user_holds_form() {
       }
     }
 
-    $form['holds'][$bnum] = $hold_to_theme;
+    $form['holds'][$varname] = $hold_to_theme;
   }
 
   $form['submit'] = array(
@@ -334,7 +370,6 @@ function sopac_user_holds_form() {
     '#name' => 'op',
     '#value' => $freezes_enabled ? t( 'Update Holds' ) : t( 'Cancel Selected Holds' ),
   );
-
   return $form;
 }
 
@@ -345,7 +380,11 @@ function sopac_user_holds_form() {
  * @param array   $form_state
  */
 function sopac_user_holds_form_validate( &$form, &$form_state ) {
-  global $user;
+  if (!$account) {
+    global $user;
+    $account = user_load($user->uid);
+  };
+
   // Set defaults to avoid errors when debugging.
   $pickup_changes = $suspend_from_changes = $suspend_to_changes = NULL;
 
@@ -357,7 +396,7 @@ function sopac_user_holds_form_validate( &$form, &$form_state ) {
   $suspend_to_changes = array();
 
   // Get holds.
-  $cardnum = $user->profile_pref_cardnum;
+  $cardnum = $account->profile_pref_cardnum;
   $password = $user->locum_pass;
   $locum = sopac_get_locum();
   $holds = $locum->get_patron_holds( $cardnum, $password );
@@ -372,7 +411,6 @@ function sopac_user_holds_form_validate( &$form, &$form_state ) {
   $suspend_holds = variable_get( 'sopac_suspend_holds', FALSE );
   if ( $suspend_holds ) {
     // Set up time object for use in validating suspension dates
-    $locum = sopac_get_locum();
     $sClosedByTimezone = $locum->locum_config['harvest_config']['timezone'];
     $date_object = new DateTime( now, new DateTimeZone( $sClosedByTimezone ) );
   }
@@ -466,8 +504,12 @@ function sopac_user_holds_form_validate( &$form, &$form_state ) {
  * @param array   $form_state
  */
 function sopac_user_holds_form_submit( &$form, &$form_state ) {
-  global $user;
-  $cardnum = $user->profile_pref_cardnum;
+  if (!$account) {
+    global $user;
+    $account = user_load($user->uid);
+  };
+
+  $cardnum = $account->profile_pref_cardnum;
   $password = $user->locum_pass;
   $cancellations = $form_state['sopac_user_holds']['cancellations'];
   $freeze_changes = $form_state['sopac_user_holds']['freeze_changes'];
@@ -1074,7 +1116,6 @@ function sopac_saved_searches_page() {
       $checkbox = '<input type="checkbox" name="search_id[]" value="' . $search_arr['search_id'] . '">';
       $parts = explode( '?', $search_arr['search_url'] );
       $search_desc = l( $search_arr['search_desc'], $parts[0], array( 'query' => $parts[1] ) );
-      // TODO: implement RSS feeds for saved searches.
       $search_feed_url = sopac_update_url( $search_arr['search_url'], 'output', 'rss' );
       $search_feed = theme_feed_icon( $search_feed_url, 'RSS Feed: ' . $search_arr['search_desc'] );
       $rows[] = array( $checkbox, $search_desc, $search_feed );

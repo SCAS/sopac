@@ -574,22 +574,6 @@ function sopac_bcode_isverified( &$user_obj ) {
   }
 }
 
-function sopac_cnum_to_pnum( &$user_obj ) {
-  if ( !$user_obj->profile_pref_cardnum ) {
-    profile_load_profile( $user_obj );
-  }
-  if ( !$user_obj->profile_pref_cardnum ) {
-    return FALSE;
-  }
-  $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user_obj->uid, $user_obj->profile_pref_cardnum ) );
-  if ( $db_obj->pnum ) {
-    return $db_obj->pnum;
-  }
-  else {
-    return FALSE;
-  }
-}
-
 /**
  * Creates an external function to formulate a search form by doing the neccesary includes.
  * An example for using this might be calling this function from within a node.

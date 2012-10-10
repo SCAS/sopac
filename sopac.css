@@ -347,6 +347,7 @@ padding-left:10px;
 
 #patroninfo th, #patroninfo-summary th, #reqlist th {
   padding: 2px 8px;
+  white-space:nowrap;
 }
 
 #patroninfo tbody tr td, #patroninfo-summary tbody tr td, #reqlist tbody tr td {

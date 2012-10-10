@@ -85,8 +85,6 @@ if (sopac_prev_search_url(TRUE)) {
     print $cover_img;
     preg_match('#\bhttps?://[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/))#', $cover_img, $match);
     $full_cover_image_url = $match[0] ? $match[0] : 'http://' . $_SERVER['SERVER_NAME'] . '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png';
-    
-    print '/' . drupal_get_path('module', 'sopac') . '/images/' . $item['mat_code'] . '.png'
     ?>
 
     <!-- Ratings -->

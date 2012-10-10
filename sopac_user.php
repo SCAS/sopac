@@ -50,7 +50,7 @@ function sopac_user_view( $op, &$edit, &$account, $category = NULL ) {
   }
 
   // Commit the page content
-  $account->content = array_merge($account->content, $result);
+  $account->content = array_merge( $account->content, $result );
 
   // The Summary is not really needed.
   if ( variable_get( 'sopac_history_hide', 1 ) ) {
@@ -83,7 +83,7 @@ function sopac_user_info_table( &$account, &$locum ) {
 
   if ( $account->profile_pref_cardnum ) {
     $cardnum = $account->profile_pref_cardnum;
-    $userinfo = $locum->get_patron_info( $cardnum );
+    if ( $cardnum ) { $userinfo = $locum->get_patron_info( $cardnum ); }
     if ( $userinfo['cardnum'] ) {
       $bcode_verify = sopac_bcode_isverified( $account );
       $pnum = $userinfo['pnum'];
@@ -279,10 +279,10 @@ function sopac_user_chkout_table( &$account, &$locum, $max_disp = NULL ) {
  *
  * @return string
  */
-function sopac_user_holds_form($form_state, $account = NULL, $max_disp = NULL) {
-  if (!$account) {
+function sopac_user_holds_form( $form_state, $account = NULL, $max_disp = NULL ) {
+  if ( !$account ) {
     global $user;
-    $account = user_load($user->uid);
+    $account = user_load( $user->uid );
   }
 
   $cardnum = $account->profile_pref_cardnum;
@@ -380,9 +380,9 @@ function sopac_user_holds_form($form_state, $account = NULL, $max_disp = NULL) {
  * @param array   $form_state
  */
 function sopac_user_holds_form_validate( &$form, &$form_state ) {
-  if (!$account) {
+  if ( !$account ) {
     global $user;
-    $account = user_load($user->uid);
+    $account = user_load( $user->uid );
   };
 
   // Set defaults to avoid errors when debugging.
@@ -504,9 +504,9 @@ function sopac_user_holds_form_validate( &$form, &$form_state ) {
  * @param array   $form_state
  */
 function sopac_user_holds_form_submit( &$form, &$form_state ) {
-  if (!$account) {
+  if ( !$account ) {
     global $user;
-    $account = user_load($user->uid);
+    $account = user_load( $user->uid );
   };
 
   $cardnum = $account->profile_pref_cardnum;

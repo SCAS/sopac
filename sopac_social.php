@@ -359,6 +359,7 @@ function sopac_tag_form($form_state, $bnum) {
     '#type' => 'hidden',
     '#default_value' => $bnum,
   );
+  
   return $form;
 }
 

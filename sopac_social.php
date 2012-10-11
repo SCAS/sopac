@@ -168,7 +168,7 @@ function theme_sopac_tag_block( $block_type ) {
 
   if ( $user->uid ) {
     if ( $put_tag_form ) {
-      $block_suffix = '<br /><br />' . drupal_get_form( 'sopac_tag_form' );
+      $block_suffix = '<br /><br />' . drupal_get_form( 'sopac_tag_form', $bnum);
     }
   }
   else {
@@ -333,27 +333,31 @@ function sopac_user_tag_hitlist( $tag ) {
  *
  * @return array Drupal form array.
  */
-function sopac_tag_form() {
+function sopac_tag_form($form_state, $bnum) {
   $form['tagform'] = array(
     '#type' => 'fieldset',
-    '#title' => t( 'Add tags ' ),
+    '#title' => t('Add tags '),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
   );
   $form['tagform']['tags'] = array(
     '#type' => 'textfield',
-    '#title' => t( 'Enter your tags' ),
+    '#title' => t('Enter your tags'),
     '#size' => 15,
     '#maxlength' => 255,
   );
   $form['tagform']['submit'] = array(
     '#type' => 'submit',
-    '#value' => t( 'Add Tags' ),
-    '#attributes' => array( 'class' => 'tagsubmit' ),
+    '#value' => t('Add Tags'),
+    '#attributes' => array('class' => 'tagsubmit'),
+  );
+  $form['tagform']['help'] = array(
+    '#type' => 'item',
+    '#value' => "Separate tags with a comma.",
   );
   $form['tagform']['bnum'] = array(
     '#type' => 'hidden',
-    '#default_value' => 0,
+    '#default_value' => $bnum,
   );
   return $form;
 }

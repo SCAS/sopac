@@ -160,6 +160,10 @@ function sopac_schema() {
     ),
   );
   
+  // SCHEMA TO ADD:
+  // sopac_last_hist_check
+
+
   return $schema;
 }
 

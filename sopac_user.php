@@ -82,15 +82,25 @@ function sopac_user_info_table( &$account, &$locum ) {
   }
 
   if ( $account->profile_pref_cardnum ) {
-    $cardnum = $account->profile_pref_cardnum;
+    $cardnum = preg_replace('/\s+/', '', $account->profile_pref_cardnum);
     if ( $cardnum ) { $userinfo = $locum->get_patron_info( $cardnum ); }
     if ( $userinfo['cardnum'] ) {
+      db_query( "DELETE FROM {sopac_card_verify}  WHERE uid = %d AND pnum = 0", $account->uid);
       $bcode_verify = sopac_bcode_isverified( $account );
       $pnum = $userinfo['pnum'];
       $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $account->uid, $cardnum ) );
       $drupal_pnum = $db_obj->pnum;
       if ( $pnum != $drupal_pnum ) {
         db_query( "UPDATE {sopac_card_verify} SET pnum = '%s' WHERE uid = %d AND cardnum = '%s'", $pnum, $account->uid, $cardnum );
+      }
+      if ( $pnum ) {
+        $pnum_userinfo = $locum->get_patron_info( $pnum );
+        if ( $pnum_userinfo['cardnum'] != $cardnum ) {
+          $edit = array( 'profile_pref_cardnum' => $pnum_userinfo['cardnum'] );
+          user_save( $account, $edit, 'Preferences' );
+          db_query( "UPDATE {sopac_card_verify} SET cardnum = '%s' WHERE uid = %d AND pnum = '%s'", $pnum_userinfo['cardnum'], $account->uid, $pnum );
+          $cardnum = $pnum_userinfo['cardnum'];
+        }
       }
     } else {
       $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s'", $account->uid, $cardnum ) );
@@ -153,18 +163,21 @@ function sopac_user_info_table( &$account, &$locum ) {
       }
       // Checkout history, if it's turned on
       if ( variable_get( 'sopac_checkout_history_enable', 0 ) ) {
-        $cohist_enabled = $user->profile_pref_cohist ? 'Enabled' : 'Disabled';
-        $last_import = db_result( db_query( "SELECT DATESUB(NOW() - last_hist_check) FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
-        if ( $cohist_enabled = 'Enabled' ) {
+        $cohist_enabled = $account->profile_pref_cohist ? 'Enabled' : 'Disabled';
+        $ils_hist_enabled = $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'status' );
+        if ( $cohist_enabled == 'Enabled' ) {
           // TODO Check ILS, enable it if it's not (w/ cache check)
-          // Grab + update newest checkouts
+          if (!$ils_hist_enabled) {
+            $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'on' );
+          }
+          // Grab + update newest checkouts if not checked in 24 hours.
         }
         else {
-          // TODO Check ILS, disable it is it's not (w/ cache check)
+          if ($ils_hist_enabled) {
+            $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'off' );
+          }
         }
-        // Reset cache age
-        db_query( "UPDATE {sopac_last_hist_check} SET last_hist_check = NOW()" );
-        $rows[] = array( array( 'data' => t( 'Checkout History' ), 'class' => 'attr_name' ), l( $cohist_enabled, 'user/checkout/history' ) );
+        $rows[] = array( array( 'data' => t( 'Checkout History' ), 'class' => 'attr_name' ), l( $cohist_enabled, 'user/' . $account->uid . '/edit/Preferences' ) );
       }
       if ( variable_get( 'sopac_numco_enable', 1 ) ) {
         $rows[] = array( array( 'data' => t( 'Items Checked Out' ), 'class' => 'attr_name' ), $userinfo['checkouts'] );
@@ -643,23 +656,33 @@ function sopac_checkout_history_page() {
   profile_load_profile( &$user );
   if ( $user->profile_pref_cardnum ) {
 
+    $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $account->uid, $cardnum ) );
+    $pnum = $db_obj->pnum;
+
     // Get the time since the last update
-    $last_import = db_result( db_query( "SELECT DATESUB(NOW() - last_hist_check) FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
+    $last_import_bib = db_result( db_query( "SELECT last_check_id FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
 
     // Check profile to see if CO hist is enabled
     $user_co_hist_enabled = $user->profile_pref_cohist;
+
     if ( !$user_co_hist_enabled ) {
       // CO hist is not enabled, would you like to enable it?
+      $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.');
       return $content;
     }
-    // CO hist is enabled, would you like to disable it?
 
-    // Set up our data sets
-    $url_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' );
     $insurge = sopac_get_insurge();
     $locum = sopac_get_locum();
     $locum_pass = substr( $user->pass, 0, 7 );
     $cardnum = $user->profile_pref_cardnum;
+
+    // Pull newest history
+    $latest_history_arr = $locum->get_patron_checkout_history( $cardnum, $locum_pass, $last_import_bib );
+
+    // CO hist is enabled, would you like to disable it?
+
+    // Set up our data sets
+    $url_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' );
     $last_checkout_result = $insurge->get_checkout_history( $user->uid, 1 );
     $last_checkout[(string) $last_checkout_result['bnum']] = $last_checkout_result['codate']; // Like this?
 

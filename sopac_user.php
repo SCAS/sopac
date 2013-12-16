@@ -656,69 +656,47 @@ function sopac_checkout_history_page() {
   profile_load_profile( &$user );
   if ( $user->profile_pref_cardnum ) {
 
-    $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $account->uid, $cardnum ) );
+    require_once('sopac_catalog.php');
+    $cardnum = $user->profile_pref_cardnum;
+
+    $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
     $pnum = $db_obj->pnum;
 
     // Get the time since the last update
     $last_import_bib = db_result( db_query( "SELECT last_check_id FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
-
+    $last_import_bib = $last_import_bib ? $last_import_bib : 0;
     // Check profile to see if CO hist is enabled
     $user_co_hist_enabled = $user->profile_pref_cohist;
 
-    if ( !$user_co_hist_enabled ) {
+    if ( $user_co_hist_enabled ) {
+      // CO hist is enabled, would you like to disable it?
+      $content .= t('Your checkout history is currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn off this feature.') . '<br /><br />';
+    } else {
       // CO hist is not enabled, would you like to enable it?
-      $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.');
-      return $content;
+      $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.') . '<br /><br />';
     }
 
     $insurge = sopac_get_insurge();
     $locum = sopac_get_locum();
     $locum_pass = substr( $user->pass, 0, 7 );
-    $cardnum = $user->profile_pref_cardnum;
 
-    // Pull newest history
+    // Pull newest history into Insurge
     $latest_history_arr = $locum->get_patron_checkout_history( $cardnum, $locum_pass, $last_import_bib );
 
-    // CO hist is enabled, would you like to disable it?
-
-    // Set up our data sets
-    $url_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' );
-    $last_checkout_result = $insurge->get_checkout_history( $user->uid, 1 );
-    $last_checkout[(string) $last_checkout_result['bnum']] = $last_checkout_result['codate']; // Like this?
-
-    // If we haven't imported data recently, do it now.
-    if ( $last_import >= variable_get( 'sopac_checkout_history_cache_time', 60 ) ) {
-
-      $checkouts = $locum->get_patron_checkout_history( $cardnum, $locum_pass, $last_checkout );
-
-      // Check: if profile->co hist is enabled , verify that it's on in the ILS
-      // check: "" disables "" off
-      if ( !is_array( $checkouts ) ) {
-        if ( $checkouts == 'out' ) {
-          $content = '<div>'. t( 'This feature is currently turned off.' ) . '</div>';
-          $toggle = l( t( 'Opt In' ), 'user/checkouts/history/opt/in' );
-        }
-        if ( $checkouts == 'in' ) {
-          $content = '<div>There are no items in your checkout history.</div>';
-          $toggle = l( t( 'Opt Out' ), 'user/checkouts/history/opt/out' );
-        }
+    foreach ($latest_history_arr AS $hist_item) {
+      $insurge->add_checkout_history($hist_item['hist_id'], $user->uid, $hist_item['bibid'], $hist_item['checkoutdate'], $hist_item['title'], $hist_item['author']);
+      if ($hist_item['hist_id'] > $last_import_bib) {
+        $last_import_bib = $hist_item['hist_id'];
       }
-      else {
-        foreach ( $checkouts as $checkout ) {
-          $bib_item = $locum->get_bib_item( $checkout['bnum'] );
-          if ( $bib_item['bnum'] ) {
-            $insurge->add_checkout_history( $user->uid, $checkout['bnum'], $bib_item['title'], $bib_item['author'] . ' ' . $bib_item['addl_author'] );
-          }
-        }
-      }
-      // Reset cache age
-      db_query( "UPDATE {sopac_last_hist_check} SET last_hist_check = NOW()" );
     }
+    db_query( "DELETE FROM {sopac_last_hist_check} WHERE uid = %d", $user->uid );
+    db_query( "INSERT INTO {sopac_last_hist_check} VALUES (%d, NOW(), %d)", $user->uid, $last_import_bib );
 
-    // Set up pagination
 
     // Grab checkout history from Insurge
-    $checkout_history = $insurge->get_checkout_history( $user->uid );
+    $checkout_history = $insurge->get_checkout_history($user->uid);
+
+    // Set up pagination
 
     if ( count( $checkout_history ) ) {
       // Set up the table
@@ -737,7 +715,7 @@ function sopac_checkout_history_page() {
     }
     else {
       // nothing in users co hist
-      $content = t( 'You do not have anything in your checkout history yet.' );
+      $content .= t( 'You do not have anything in your checkout history yet.' );
     }
 
   }

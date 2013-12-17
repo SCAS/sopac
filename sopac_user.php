@@ -653,76 +653,170 @@ function sopac_checkouts_page() {
  */
 function sopac_checkout_history_page() {
   global $user;
-  profile_load_profile( &$user );
-  if ( $user->profile_pref_cardnum ) {
 
-    require_once('sopac_catalog.php');
-    $cardnum = $user->profile_pref_cardnum;
+  $account = user_load( $user->uid );
+  $cardnum = $account->profile_pref_cardnum;
+  $locum = sopac_get_locum();
+  $userinfo = $locum->get_patron_info( $cardnum );
+  $bcode_verify = sopac_bcode_isverified( $account );
 
-    $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
-    $pnum = $db_obj->pnum;
 
-    // Get the time since the last update
-    $last_import_bib = db_result( db_query( "SELECT last_check_id FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
-    $last_import_bib = $last_import_bib ? $last_import_bib : 0;
-    // Check profile to see if CO hist is enabled
-    $user_co_hist_enabled = $user->profile_pref_cohist;
 
-    if ( $user_co_hist_enabled ) {
-      // CO hist is enabled, would you like to disable it?
-      $content .= t('Your checkout history is currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn off this feature.') . '<br /><br />';
-    } else {
-      // CO hist is not enabled, would you like to enable it?
-      $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.') . '<br /><br />';
+  $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
+  $pnum = $db_obj->pnum;
+
+  // Get the time since the last update
+  $last_import_bib = db_result( db_query( "SELECT last_check_id FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
+  $last_import_bib = $last_import_bib ? $last_import_bib : 0;
+  // Check profile to see if CO hist is enabled
+  $user_co_hist_enabled = $account->profile_pref_cohist;
+
+  if ( $user_co_hist_enabled ) {
+    // CO hist is enabled, would you like to disable it?
+    $content .= t('Your checkout history is currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn off this feature.') . '<br /><br />';
+  } else {
+    // CO hist is not enabled, would you like to enable it?
+    $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.') . '<br /><br />';
+  }
+
+  // Pull newest history into Insurge
+  $latest_history_arr = $locum->get_patron_checkout_history( $cardnum, $locum_pass, $last_import_bib );
+
+  foreach ($latest_history_arr AS $hist_item) {
+    $insurge->add_checkout_history($hist_item['hist_id'], $user->uid, $hist_item['bibid'], $hist_item['checkoutdate'], $hist_item['title'], $hist_item['author']);
+    if ($hist_item['hist_id'] > $last_import_bib) {
+      $last_import_bib = $hist_item['hist_id'];
     }
+  }
+  db_query( "DELETE FROM {sopac_last_hist_check} WHERE uid = %d", $user->uid );
+  db_query( "INSERT INTO {sopac_last_hist_check} VALUES (%d, NOW(), %d)", $user->uid, $last_import_bib );
 
-    $insurge = sopac_get_insurge();
-    $locum = sopac_get_locum();
-    $locum_pass = substr( $user->pass, 0, 7 );
-
-    // Pull newest history into Insurge
-    $latest_history_arr = $locum->get_patron_checkout_history( $cardnum, $locum_pass, $last_import_bib );
-
-    foreach ($latest_history_arr AS $hist_item) {
-      $insurge->add_checkout_history($hist_item['hist_id'], $user->uid, $hist_item['bibid'], $hist_item['checkoutdate'], $hist_item['title'], $hist_item['author']);
-      if ($hist_item['hist_id'] > $last_import_bib) {
-        $last_import_bib = $hist_item['hist_id'];
-      }
-    }
-    db_query( "DELETE FROM {sopac_last_hist_check} WHERE uid = %d", $user->uid );
-    db_query( "INSERT INTO {sopac_last_hist_check} VALUES (%d, NOW(), %d)", $user->uid, $last_import_bib );
+  // Simple search form
+  // TODO: Search form
 
 
-    // Grab checkout history from Insurge
-    $checkout_history = $insurge->get_checkout_history($user->uid);
 
-    // Set up pagination
 
-    if ( count( $checkout_history ) ) {
-      // Set up the table
-      $header = array( '', t( 'Title' ), t( 'Author' ), t( 'Check-Out Date' ) );
-      $rows = array();
-      foreach ( $checkout_history as $hist_item ) {
-        $item = $locum->get_bib_item( $hist_item['bnum'] );
-        $new_author_str = sopac_author_format( $item['author'], $item['addl_author'] );
-        $rows[] = array(
-          l( ucwords( $item['title'] ), $url_prefix . '/record/' . $item['bnum'] ),
-          l( $new_author_str, $url_prefix . '/search/author/' . urlencode( $new_author_str ) ),
-          $hist_item['codate'], // Figure out the best way to format this
-        );
-        $content = theme( 'table', $header, $rows, array( 'id' => 'patroninfo', 'cellspacing' => '0' ) );
-      }
-    }
-    else {
-      // nothing in users co hist
-      $content .= t( 'You do not have anything in your checkout history yet.' );
-    }
-
+  if ( $bcode_verify ) {
+    $account->bcode_verify = TRUE;
   }
   else {
-    $content = '<div class="cohist_nocard">' . t( 'Please register your library card to take advantage of this feature.' ) . '</div>';
+    $account->bcode_verify = FALSE;
   }
+  if ( $userinfo['pnum'] ) {
+    $account->valid_card = TRUE;
+  }
+  else {
+    $account->valid_card = FALSE;
+  }
+  profile_load_profile( &$user );
+
+  if ( $account->valid_card && $bcode_verify ) {
+    $content .= drupal_get_form( 'sopac_user_history_form', $account );
+  }
+  elseif ( $account->valid_card && !$bcode_verify ) {
+    $content .= '<div class="error">' . variable_get( 'sopac_uv_cardnum', t( 'The card number you have provided has not yet been verified by you.  In order to make sure that you are the rightful owner of this library card number, we need to ask you some simple questions.' ) ) . '</div>' . drupal_get_form( 'sopac_bcode_verify_form', $account->uid, $cardnum );
+  }
+  elseif ( $cardnum && !$account->valid_card ) {
+    $content .= '<div class="error">' . variable_get( 'sopac_invalid_cardnum', t( 'It appears that the library card number stored on our website is invalid. If you have received a new card, or feel that this is an error, please click on the card number above to change it to your most recent library card. If you need further help, please contact us.' ) ) . '</div>';
+  }
+  elseif ( !$user->uid ) {
+    $content .= '<div class="error">' . t( 'You must be ' ) . l( t( 'logged in' ), 'user' ) . t( ' to view this page.' ) . '</div>';
+  }
+  elseif ( !$cardnum ) {
+    $content .= '<div class="error">' . t( 'You must register a valid ' ) . l( t( 'library card number' ), 'user/' . $user->uid . '/edit/Preferences' ) . t( ' to view this page.' ) . '</div>';
+  }
+
   return $content;
+
+}
+
+/**
+ * Use form API to creat checkout history table
+ *
+ * @return string
+ */
+function sopac_user_history_form( $form_state, $account = NULL, $max_disp = NULL ) {
+  if ( !$account ) {
+    global $user;
+    $account = user_load( $user->uid );
+  }
+
+  require_once('sopac_catalog.php');
+
+  $cardnum = $account->profile_pref_cardnum;
+  $ils_pass = $user->locum_pass;
+  $locum = sopac_get_locum();
+  $insurge = sopac_get_insurge();
+
+    
+
+  // Grab checkout history from Insurge
+  // TODO: Parse get vars for sort_by and search_txt, passit it to get_checkout_history
+  $hist_arr = $insurge->get_checkout_history($user->uid);
+
+  $form = array(
+    '#theme' => 'form_theme_bridge',
+    '#bridge_to_theme' => 'sopac_user_history_list',
+  );
+
+  $form['history'] = array(
+    '#tree' => TRUE,
+    '#iterable' => TRUE,
+  );
+
+  // Construct the form
+  if ( !count( $hist_arr ) ) {
+    $form['empty'] = array(
+      '#type' => 'markup',
+      '#value' => t( 'No items in your history, currently.' ),
+    );
+    return $form;
+  }
+
+  //$form = array(
+  //  '#theme' => 'form_theme_bridge',
+  //  '#bridge_to_theme' => 'sopac_user_history_list',
+  //);
+
+  $sopac_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' ) . '/record/';
+
+  foreach ( $hist_arr as $hist_item ) {
+    $bnum = $hist_item['bnum'];
+    $hist_to_theme = array();
+    $varname = $hist_item['hist_id'] ? $hist_item['hist_id'] : $bnum;
+
+    $hist_to_theme['bnum'] = array(
+      '#type' => 'value',
+      '#value' => $bnum,
+    );
+    $hist_to_theme['delete'] = array(
+      '#type' => 'checkbox',
+      '#default_value' => FALSE,
+    );
+    $hist_to_theme['title_link'] = array(
+      '#type' => 'markup',
+      '#value' => l( t( ucwords($hist_item['title']) ), $sopac_prefix . $bnum ),
+    );
+    $hist_to_theme['author'] = array(
+      '#type' => 'markup',
+      '#value' => $hist_item['author']
+    );
+    $hist_to_theme['codate'] = array(
+      '#type' => 'markup',
+      '#value' => $hist_item['codate']
+    );
+
+    $form['history'][$varname] = $hist_to_theme;
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#name' => 'op',
+    '#value' => t( 'Delete Selected Items' ),
+  );
+
+  return $form;
 }
 
 /**

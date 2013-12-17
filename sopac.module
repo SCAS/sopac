@@ -500,6 +500,10 @@ function sopac_theme() {
       'template' => 'sopac-user-holds-list-multirow',
       'arguments' => array( 'data' => array() ),
     ),
+    'sopac_user_history_list' => array(
+      'template' => 'sopac-user-history-list',
+      'arguments' => array( 'data' => array() ),
+    ),
   );
 }
 

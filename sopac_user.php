@@ -615,6 +615,16 @@ function sopac_checkouts_page() {
   $locum = sopac_get_locum();
   $userinfo = $locum->get_patron_info( $cardnum );
   $bcode_verify = sopac_bcode_isverified( $account );
+
+  // Initialize the pager if need be
+  if ( $pager_page_array[0] ) {
+    $page = $pager_page_array[0] + 1;
+  }
+  else {
+    $page = 1;
+  }
+  $page_offset = $limit * ( $page - 1 );
+
   if ( $bcode_verify ) {
     $account->bcode_verify = TRUE;
   }
@@ -627,6 +637,7 @@ function sopac_checkouts_page() {
   else {
     $account->valid_card = FALSE;
   }
+  
   profile_load_profile( &$user );
 
   if ( $account->valid_card && $bcode_verify ) {
@@ -657,9 +668,14 @@ function sopac_checkout_history_page() {
   $account = user_load( $user->uid );
   $cardnum = $account->profile_pref_cardnum;
   $locum = sopac_get_locum();
+  $insurge = sopac_get_insurge();
   $userinfo = $locum->get_patron_info( $cardnum );
   $bcode_verify = sopac_bcode_isverified( $account );
-
+  $getvars = sopac_parse_get_vars();
+  $pager_page_array = explode( ',', $getvars['page'] );
+  $page_limit = 25; // TODO. Hard coded for now
+  $page = isset( $_GET['page'] ) ? $_GET['page'] : 0;
+  $offset = ( $page_limit * $page );
 
 
   $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
@@ -695,7 +711,12 @@ function sopac_checkout_history_page() {
   // TODO: Search form
 
 
-
+  // Grab checkout history from Insurge
+  // TODO: Parse get vars for sort_by and search_txt, passit it to get_checkout_history
+  $hist_arr = $insurge->get_checkout_history($user->uid, $search_str, $sort, NULL, $offset);
+  $hist_count = count($hist_arr);
+  sopac_pager_init( $hist_count, 0, $page_limit );
+  $hist_arr = $insurge->get_checkout_history($user->uid, $search_str, $sort, $page_limit, $offset);
 
   if ( $bcode_verify ) {
     $account->bcode_verify = TRUE;
@@ -712,7 +733,7 @@ function sopac_checkout_history_page() {
   profile_load_profile( &$user );
 
   if ( $account->valid_card && $bcode_verify ) {
-    $content .= drupal_get_form( 'sopac_user_history_form', $account );
+    $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr );
   }
   elseif ( $account->valid_card && !$bcode_verify ) {
     $content .= '<div class="error">' . variable_get( 'sopac_uv_cardnum', t( 'The card number you have provided has not yet been verified by you.  In order to make sure that you are the rightful owner of this library card number, we need to ask you some simple questions.' ) ) . '</div>' . drupal_get_form( 'sopac_bcode_verify_form', $account->uid, $cardnum );
@@ -727,7 +748,7 @@ function sopac_checkout_history_page() {
     $content .= '<div class="error">' . t( 'You must register a valid ' ) . l( t( 'library card number' ), 'user/' . $user->uid . '/edit/Preferences' ) . t( ' to view this page.' ) . '</div>';
   }
 
-  return $content;
+  return $content . theme( 'pager', NULL, $page_limit, 0, NULL, 6 );
 
 }
 
@@ -736,24 +757,13 @@ function sopac_checkout_history_page() {
  *
  * @return string
  */
-function sopac_user_history_form( $form_state, $account = NULL, $max_disp = NULL ) {
+function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL ) {
   if ( !$account ) {
     global $user;
     $account = user_load( $user->uid );
   }
 
-  require_once('sopac_catalog.php');
-
-  $cardnum = $account->profile_pref_cardnum;
-  $ils_pass = $user->locum_pass;
-  $locum = sopac_get_locum();
-  $insurge = sopac_get_insurge();
-
-    
-
-  // Grab checkout history from Insurge
-  // TODO: Parse get vars for sort_by and search_txt, passit it to get_checkout_history
-  $hist_arr = $insurge->get_checkout_history($user->uid);
+  //require_once('sopac_catalog.php');
 
   $form = array(
     '#theme' => 'form_theme_bridge',
@@ -774,21 +784,20 @@ function sopac_user_history_form( $form_state, $account = NULL, $max_disp = NULL
     return $form;
   }
 
-  //$form = array(
-  //  '#theme' => 'form_theme_bridge',
-  //  '#bridge_to_theme' => 'sopac_user_history_list',
-  //);
-
   $sopac_prefix = variable_get( 'sopac_url_prefix', 'cat/seek' ) . '/record/';
 
   foreach ( $hist_arr as $hist_item ) {
-    $bnum = $hist_item['bnum'];
     $hist_to_theme = array();
+    $bnum = $hist_item['bnum'];
     $varname = $hist_item['hist_id'] ? $hist_item['hist_id'] : $bnum;
 
     $hist_to_theme['bnum'] = array(
       '#type' => 'value',
       '#value' => $bnum,
+    );
+    $hist_to_theme['sort'] = array(
+      '#type' => 'value',
+      '#value' => $sort_by, // TODO
     );
     $hist_to_theme['delete'] = array(
       '#type' => 'checkbox',
@@ -814,6 +823,12 @@ function sopac_user_history_form( $form_state, $account = NULL, $max_disp = NULL
     '#type' => 'submit',
     '#name' => 'op',
     '#value' => t( 'Delete Selected Items' ),
+  );
+
+  $form['deleteall'] = array(
+    '#type' => 'submit',
+    '#name' => 'op',
+    '#value' => t( 'Delete All Items' ),
   );
 
   return $form;

@@ -676,6 +676,9 @@ function sopac_checkout_history_page() {
   $page_limit = 25; // TODO. Hard coded for now
   $page = isset( $_GET['page'] ) ? $_GET['page'] : 0;
   $offset = ( $page_limit * $page );
+  $search_str = isset( $_GET['search'] ) ? $_GET['search'] : 0;
+  $sortables = array('title_up', 'title_down', 'author_up', 'author_down');
+  if (in_array($_GET['sort'], $sortables)) { $sort = $_GET['sort']; } else { $sort = NULL; }
 
 
   $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
@@ -732,8 +735,10 @@ function sopac_checkout_history_page() {
   }
   profile_load_profile( &$user );
 
+  if ($hist_count > $page_limit) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ) . '<br />'; }
+
   if ( $account->valid_card && $bcode_verify ) {
-    $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr );
+    $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr, $sort, $search_str );
   }
   elseif ( $account->valid_card && !$bcode_verify ) {
     $content .= '<div class="error">' . variable_get( 'sopac_uv_cardnum', t( 'The card number you have provided has not yet been verified by you.  In order to make sure that you are the rightful owner of this library card number, we need to ask you some simple questions.' ) ) . '</div>' . drupal_get_form( 'sopac_bcode_verify_form', $account->uid, $cardnum );
@@ -748,7 +753,9 @@ function sopac_checkout_history_page() {
     $content .= '<div class="error">' . t( 'You must register a valid ' ) . l( t( 'library card number' ), 'user/' . $user->uid . '/edit/Preferences' ) . t( ' to view this page.' ) . '</div>';
   }
 
-  return $content . theme( 'pager', NULL, $page_limit, 0, NULL, 6 );
+  if ($hist_count > $page_limit) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ); }
+
+  return $content;
 
 }
 
@@ -757,22 +764,34 @@ function sopac_checkout_history_page() {
  *
  * @return string
  */
-function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL ) {
+
+function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL, $sort_by = NULL, $search_str = NULL ) {
   if ( !$account ) {
     global $user;
     $account = user_load( $user->uid );
   }
 
-  //require_once('sopac_catalog.php');
-
-  $form = array(
-    '#theme' => 'form_theme_bridge',
-    '#bridge_to_theme' => 'sopac_user_history_list',
-  );
+  //$form = array(
+  //  '#theme' => 'form_theme_bridge',
+  //  '#bridge_to_theme' => 'sopac_user_history_list',
+  //);
 
   $form['history'] = array(
     '#tree' => TRUE,
     '#iterable' => TRUE,
+  );
+
+  $form['#validate'][] = 'sopac_user_history_form_validate';
+  $form['#submit'][] = 'sopac_user_history_form_submit';
+
+  $form['sort_by'] = array(
+    '#type' => 'markup',
+    '#value' => $sort_by,
+  );
+
+  $form['search_str'] = array(
+    '#type' => 'markup',
+    '#value' => $search_str,
   );
 
   // Construct the form
@@ -797,7 +816,11 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
     );
     $hist_to_theme['sort'] = array(
       '#type' => 'value',
-      '#value' => $sort_by, // TODO
+      '#value' => $sort_by,
+    );
+    $hist_to_theme['search'] = array(
+      '#type' => 'value',
+      '#value' => $search_str,
     );
     $hist_to_theme['delete'] = array(
       '#type' => 'checkbox',
@@ -823,15 +846,31 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
     '#type' => 'submit',
     '#name' => 'op',
     '#value' => t( 'Delete Selected Items' ),
+    '#submit' => TRUE,
   );
 
-  $form['deleteall'] = array(
-    '#type' => 'submit',
-    '#name' => 'op',
-    '#value' => t( 'Delete All Items' ),
-  );
+  //$form['deleteall'] = array(
+  //  '#type' => 'submit',
+  //  '#name' => 'op',
+  //  '#value' => t( 'Delete All Items' ),
+  //);
 
   return $form;
+
+}
+
+function sopac_user_history_form_validate( &$form, &$form_state ) {
+
+drupal_set_message( 'I though this would work' );
+die();
+
+}
+
+function sopac_user_history_form_submit( &$form, &$form_state ) {
+
+drupal_set_message( 'I though this would work' );
+die();
+
 }
 
 /**

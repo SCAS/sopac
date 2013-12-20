@@ -770,7 +770,7 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
     global $user;
     $account = user_load( $user->uid );
   }
-
+print_r($form_state);
   //$form = array(
   //  '#theme' => 'form_theme_bridge',
   //  '#bridge_to_theme' => 'sopac_user_history_list',
@@ -782,7 +782,7 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
   );
 
   $form['#validate'][] = 'sopac_user_history_form_validate';
-  $form['#submit'][] = 'sopac_user_history_form_submit';
+  $form['#submit'][] = 'sopac_user_history_form_confirm';
 
   $form['sort_by'] = array(
     '#type' => 'markup',
@@ -846,14 +846,13 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
     '#type' => 'submit',
     '#name' => 'op',
     '#value' => t( 'Delete Selected Items' ),
-    '#submit' => TRUE,
   );
 
-  //$form['deleteall'] = array(
-  //  '#type' => 'submit',
-  //  '#name' => 'op',
-  //  '#value' => t( 'Delete All Items' ),
-  //);
+  $form['deleteall'] = array(
+    '#type' => 'submit',
+    '#name' => 'op',
+    '#value' => t( 'Delete All Items' ),
+  );
 
   return $form;
 
@@ -861,15 +860,14 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
 
 function sopac_user_history_form_validate( &$form, &$form_state ) {
 
-drupal_set_message( 'I though this would work' );
-die();
-
+//print "test1";
+//die();
+  return TRUE;
 }
 
-function sopac_user_history_form_submit( &$form, &$form_state ) {
+function sopac_user_history_form_confirm( &$form, &$form_state ) {
 
-drupal_set_message( 'I though this would work' );
-die();
+  $form_state['rebuild'] = TRUE;
 
 }
 

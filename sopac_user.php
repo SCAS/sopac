@@ -680,9 +680,23 @@ function sopac_checkout_history_page() {
   $sortables = array('title_up', 'title_down', 'author_up', 'author_down');
   if (in_array($_GET['sort'], $sortables)) { $sort = $_GET['sort']; } else { $sort = NULL; }
 
+  if ( $bcode_verify ) {
+      $account->bcode_verify = TRUE;
+    }
+    else {
+      $account->bcode_verify = FALSE;
+    }
+    if ( $userinfo['pnum'] ) {
+      $account->valid_card = TRUE;
+    }
+    else {
+      $account->valid_card = FALSE;
+    }
+  profile_load_profile( &$user );
 
   $db_obj = db_fetch_object( db_query( "SELECT pnum FROM {sopac_card_verify} WHERE uid = %d AND cardnum = '%s' AND verified > 0", $user->uid, $cardnum ) );
   $pnum = $db_obj->pnum;
+
 
   // Get the time since the last update
   $last_import_bib = db_result( db_query( "SELECT last_check_id FROM {sopac_last_hist_check} WHERE uid = '" . $user->uid . "'" ) );
@@ -690,12 +704,14 @@ function sopac_checkout_history_page() {
   // Check profile to see if CO hist is enabled
   $user_co_hist_enabled = $account->profile_pref_cohist;
 
-  if ( $user_co_hist_enabled ) {
-    // CO hist is enabled, would you like to disable it?
-    $content .= t('Your checkout history is currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn off this feature.') . '<br /><br />';
-  } else {
-    // CO hist is not enabled, would you like to enable it?
-    $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.') . '<br /><br />';
+  if (!$_POST['op']) {
+    if ( $user_co_hist_enabled ) {
+      // CO hist is enabled, would you like to disable it?
+      $content .= t('Your checkout history is currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn off this feature.') . '<br /><br />';
+    } else {
+      // CO hist is not enabled, would you like to enable it?
+      $content .= t('Your checkout history is not currently being saved. ') . l( 'Click here', 'user/' . $user->uid . '/edit/Preferences' ) . t(' to turn on this feature.') . '<br /><br />';
+    }
   }
 
   // Pull newest history into Insurge
@@ -721,21 +737,9 @@ function sopac_checkout_history_page() {
   sopac_pager_init( $hist_count, 0, $page_limit );
   $hist_arr = $insurge->get_checkout_history($user->uid, $search_str, $sort, $page_limit, $offset);
 
-  if ( $bcode_verify ) {
-    $account->bcode_verify = TRUE;
-  }
-  else {
-    $account->bcode_verify = FALSE;
-  }
-  if ( $userinfo['pnum'] ) {
-    $account->valid_card = TRUE;
-  }
-  else {
-    $account->valid_card = FALSE;
-  }
-  profile_load_profile( &$user );
+  if (($hist_count > $page_limit) && !$_POST['op']) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ) . '<br />'; }
 
-  if ($hist_count > $page_limit) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ) . '<br />'; }
+
 
   if ( $account->valid_card && $bcode_verify ) {
     $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr, $sort, $search_str );
@@ -753,7 +757,9 @@ function sopac_checkout_history_page() {
     $content .= '<div class="error">' . t( 'You must register a valid ' ) . l( t( 'library card number' ), 'user/' . $user->uid . '/edit/Preferences' ) . t( ' to view this page.' ) . '</div>';
   }
 
-  if ($hist_count > $page_limit) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ); }
+
+  if (($hist_count > $page_limit) && !$_POST['op']) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ); }
+
 
   return $content;
 
@@ -770,11 +776,10 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
     global $user;
     $account = user_load( $user->uid );
   }
-print_r($form_state);
-  //$form = array(
-  //  '#theme' => 'form_theme_bridge',
-  //  '#bridge_to_theme' => 'sopac_user_history_list',
-  //);
+
+  if (isset($form_state['values']['history'])) {
+    return sopac_user_history_form_confirm($form_state);
+  }
 
   $form['history'] = array(
     '#tree' => TRUE,
@@ -782,7 +787,7 @@ print_r($form_state);
   );
 
   $form['#validate'][] = 'sopac_user_history_form_validate';
-  $form['#submit'][] = 'sopac_user_history_form_confirm';
+  $form['#submit'][] = 'sopac_user_history_form_submit';
 
   $form['sort_by'] = array(
     '#type' => 'markup',
@@ -813,14 +818,6 @@ print_r($form_state);
     $hist_to_theme['bnum'] = array(
       '#type' => 'value',
       '#value' => $bnum,
-    );
-    $hist_to_theme['sort'] = array(
-      '#type' => 'value',
-      '#value' => $sort_by,
-    );
-    $hist_to_theme['search'] = array(
-      '#type' => 'value',
-      '#value' => $search_str,
     );
     $hist_to_theme['delete'] = array(
       '#type' => 'checkbox',
@@ -858,17 +855,51 @@ print_r($form_state);
 
 }
 
-function sopac_user_history_form_validate( &$form, &$form_state ) {
+function sopac_user_history_form_confirm(&$form_state) {
 
-//print "test1";
-//die();
+  $desc = '<div>Are you sure? This will permanently delete history items.</div>';
+  // Tell the submit handler to process the form
+  $form['process'] = array('#type' => 'hidden', '#value' => 'true');
+  // Make sure the form redirects in the end
+  $form['destination'] = array('#type' => 'hidden', '#value' => 'user/library/history');
+  return confirm_form($form,
+                      'Are you sure?',
+                      'user/library/history',
+                      $desc,
+                      'Delete',
+                      'Cancel');
+}
+
+function sopac_user_history_form_validate( &$form, &$form_state ) {
   return TRUE;
 }
 
-function sopac_user_history_form_confirm( &$form, &$form_state ) {
+function sopac_user_history_form_submit( &$form, &$form_state ) {
+  global $user;
 
-  $form_state['rebuild'] = TRUE;
+  if ($form_state['values']['confirm']) { 
+    // Process form elements
+    $insurge = sopac_get_insurge();
+    if ($form['#parameters'][1]['values']['op'] == t('Delete All Items')) {
+      // Delete all history
+      //$insurge->delete_checkout_history($user->uid, NULL, 1);
+      print "Delete all ";
+    } else {
+      // Selective delete
+      $form_values = $form['#parameters'][1]['values']['history'];
 
+      foreach ($form_values as $hist_id => $hist_info) {
+        if ($hist_info['delete'] == 1) {
+          // Delete $hist_id
+          //$insurge->delete_checkout_history($user->uid, $hist_id);
+          print "Delete: $hist_id .. ";
+        }
+      }
+    }
+    die();
+  } else {
+    $form_state['rebuild'] = TRUE;
+  }
 }
 
 /**

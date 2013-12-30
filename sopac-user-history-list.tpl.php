@@ -2,11 +2,11 @@
 
   print $required_hidden_fields;
 
-//print_r($form['history'][22555]['delete']);
+//print_r($form['sort_by']);
 
   $uri_arr = explode( '?', request_uri() );
   $uri = $uri_arr[0];
-  $get_sort = $form['sort_by'];
+  $get_sort = $form['sort_by']['#value'];
   $search_str = $form['search_str'] ? $form['search_str'] : NULL;
 
   $sort_title = $uri . '?sort=' . (($get_sort == 'title_up') ? 'title_down' : 'title_up');
@@ -35,13 +35,16 @@
   foreach ($form['history'] as $hist_id => $hist_item) {
     if (is_numeric($hist_id)) {
       $zebra = $zebra == 'odd' ? 'even' : 'odd';
+      $codate = $hist_item['codate']['#value'];
+      $date_arr = date_parse($codate);
+      $codate_fmt = $date_arr['month'] . '-' . $date_arr['day'] . '-' . $date_arr['year'];
 ?>
       <tr class="<?php print $zebra ?>">
         <td><?php print drupal_render($form['history'][$hist_id]['delete']) ?></td>
         <td>
           <strong><?php print $hist_item['title_link']['#value'] ?></strong><br />
-          <em><?php print $hist_item['author']['#value'] ?></em><br />
-          This item was checked out on <?php print $hist_item['codate']['#value'] ?>
+          <?php if ($hist_item['author']['#value']) { print '<em>' . $hist_item['author']['#value'] . '</em><br />'; } ?>
+          This item was checked out on <strong><?php print $codate_fmt ?></strong>
         </td>
       </tr>
 <?php

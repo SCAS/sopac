@@ -21,6 +21,24 @@ if (!module_exists('covercache')) {
                  variable_get('sopac_url_prefix', 'cat/seek') . '/record/' . $locum_result['bnum'],
                  array('html' => TRUE));
 }
+if ( !count($locum_result['availability']['items'] ) ) {
+  $call_number_text = $locum_result['callnum'];
+} else {
+  $callnum_arr = array();
+  foreach ($locum_result['availability']['items'] as $locum_item) {
+    if (!in_array(trim($locum_item['callnum']), $callnum_arr)) {
+      $callnum_arr[] = trim($locum_item['callnum']);
+    }
+  }
+  if (!count($callnum_arr)) {
+    $call_number_text = $locum_result['callnum'];
+  } else if (count($callnum_arr) == 1) {
+    $call_number_text = $callnum_arr[0];
+  } else if (count($callnum_arr) > 1) {
+    $call_number_text = 'Multiple: ' . implode(', ', $callnum_arr);
+  }
+}
+
 ?>
 <div class="hitlist-item">
 
@@ -45,7 +63,7 @@ if (!module_exists('covercache')) {
       </li>
       <li><?php print $locum_result['pub_info']; ?></li>
       <?php if ($locum_result['callnum']) {
-        ?><li><?php print t('Call number: '); ?><strong><?php print $locum_result['callnum']; ?></strong></li><?php
+        ?><li><?php print t('Call number: '); ?><strong><?php print $call_number_text; ?></strong></li><?php
       }
       elseif (count($locum_result['avail_details'])) {
         ?><li><?php print t('Call number: '); ?><strong><?php print key($locum_result['avail_details']); ?></strong></li><?php

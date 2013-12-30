@@ -737,12 +737,17 @@ function sopac_checkout_history_page() {
   sopac_pager_init( $hist_count, 0, $page_limit );
   $hist_arr = $insurge->get_checkout_history($user->uid, $search_str, $sort, $page_limit, $offset);
 
-  if (($hist_count > $page_limit) && !$_POST['op']) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ) . '<br />'; }
+  if (($hist_count > $page_limit) && !$_POST['op']) { $show_pager = TRUE; }
+  if ($show_pager) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ) . '<br />'; }
 
 
 
   if ( $account->valid_card && $bcode_verify ) {
-    $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr, $sort, $search_str );
+    if ($hist_count) {
+      $content .= drupal_get_form( 'sopac_user_history_form', $account, $hist_arr, $sort, $search_str );
+    } else {
+      $content .= t('You do not currently have anything in your checkout history.');
+    }
   }
   elseif ( $account->valid_card && !$bcode_verify ) {
     $content .= '<div class="error">' . variable_get( 'sopac_uv_cardnum', t( 'The card number you have provided has not yet been verified by you.  In order to make sure that you are the rightful owner of this library card number, we need to ask you some simple questions.' ) ) . '</div>' . drupal_get_form( 'sopac_bcode_verify_form', $account->uid, $cardnum );
@@ -758,7 +763,7 @@ function sopac_checkout_history_page() {
   }
 
 
-  if (($hist_count > $page_limit) && !$_POST['op']) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ); }
+  if ($show_pager) { $content .= theme( 'pager', NULL, $page_limit, 0, NULL, 6 ); }
 
 
   return $content;
@@ -792,11 +797,6 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
   $form['sort_by'] = array(
     '#type' => 'markup',
     '#value' => $sort_by,
-  );
-
-  $form['search_str'] = array(
-    '#type' => 'markup',
-    '#value' => $search_str,
   );
 
   // Construct the form
@@ -857,7 +857,7 @@ function sopac_user_history_form( $form_state, $account = NULL, $hist_arr = NULL
 
 function sopac_user_history_form_confirm(&$form_state) {
 
-  $desc = '<div>Are you sure? This will permanently delete history items.</div>';
+  $desc = '<div>Are you sure? This will permanently delete history items.</div><br />';
   // Tell the submit handler to process the form
   $form['process'] = array('#type' => 'hidden', '#value' => 'true');
   // Make sure the form redirects in the end
@@ -878,12 +878,18 @@ function sopac_user_history_form_submit( &$form, &$form_state ) {
   global $user;
 
   if ($form_state['values']['confirm']) { 
+    profile_load_profile( &$user );
+    if ( !$user->profile_pref_cardnum ) {
+      return;
+    }
     // Process form elements
     $insurge = sopac_get_insurge();
+    $locum = sopac_get_locum();
+    $locum_pass = substr( $user->pass, 0, 7 );
     if ($form['#parameters'][1]['values']['op'] == t('Delete All Items')) {
       // Delete all history
-      //$insurge->delete_checkout_history($user->uid, NULL, 1);
-      print "Delete all ";
+      $insurge->delete_checkout_history($user->uid, NULL, 1);
+      $locum->delete_patron_checkout_history($user->profile_pref_cardnum, $locum_pass, NULL, TRUE );
     } else {
       // Selective delete
       $form_values = $form['#parameters'][1]['values']['history'];
@@ -891,12 +897,11 @@ function sopac_user_history_form_submit( &$form, &$form_state ) {
       foreach ($form_values as $hist_id => $hist_info) {
         if ($hist_info['delete'] == 1) {
           // Delete $hist_id
-          //$insurge->delete_checkout_history($user->uid, $hist_id);
-          print "Delete: $hist_id .. ";
+          $insurge->delete_checkout_history($user->uid, $hist_id);
+          $locum->delete_patron_checkout_history($user->profile_pref_cardnum, $locum_pass, $hist_id, FALSE );
         }
       }
     }
-    die();
   } else {
     $form_state['rebuild'] = TRUE;
   }

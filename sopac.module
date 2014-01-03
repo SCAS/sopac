@@ -15,8 +15,9 @@ function sopac_init() {
   global $user, $base_url;
 
   // Handle SSL redirection if it is enabled.
+  // You may need to occasionally add additional paths here so that embedded javascript can load in iframes (imce is an example of that)
   if ( variable_get( 'sopac_ssl_enable', 0 ) ) {
-    $protected_uri = preg_match( '/^(\/user|\/myaccount|\/login)/', request_uri(), $debug_match );
+    $protected_uri = preg_match( '/^(\/user|\/myaccount|\/login|\/imce)/', request_uri(), $debug_match );
     if ( $_SERVER['HTTPS'] && !$protected_uri ) {
       $new_link = 'http://' . $_SERVER['HTTP_HOST'] . request_uri();
     }

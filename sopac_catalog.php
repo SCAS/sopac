@@ -456,7 +456,7 @@ function sopac_prev_search_url( $override = FALSE ) {
   $referer = substr( $_SERVER['HTTP_REFERER'], 7 + strlen( $_SERVER['HTTP_HOST'] ) );
   $search = $_SESSION['search_url'];
   if ( ( ( $search == $referer ) || $override ) && $_SESSION['search_url'] ) {
-    return $search;
+    return substr($search, 1);
   }
   else {
     return FALSE;

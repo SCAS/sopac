@@ -22,18 +22,18 @@ if (!module_exists('covercache')) {
                  array('html' => TRUE));
 }
 if ( !count($locum_result['availability']['items'] ) ) {
-  $call_number_text = $locum_result['callnum'];
+  $call_number_text = strtoupper($locum_result['callnum']);
 } else {
   $callnum_arr = array();
   foreach ($locum_result['availability']['items'] as $locum_item) {
-    if (!in_array(trim($locum_item['callnum']), $callnum_arr)) {
-      $callnum_arr[] = trim($locum_item['callnum']);
+    if (!in_array(trim(strtoupper($locum_item['callnum'])), $callnum_arr)) {
+      $callnum_arr[] = trim(strtoupper($locum_item['callnum']));
     }
   }
   if (!count($callnum_arr)) {
-    $call_number_text = $locum_result['callnum'];
+    $call_number_text = strtoupper($locum_result['callnum']);
   } else if (count($callnum_arr) == 1) {
-    $call_number_text = $callnum_arr[0];
+    $call_number_text = strtoupper($callnum_arr[0]);
   } else if (count($callnum_arr) > 1) {
     $call_number_text = 'Multiple: ' . implode(', ', $callnum_arr);
   }

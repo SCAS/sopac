@@ -1008,6 +1008,7 @@ function sopac_fines_page() {
       $fine_total = (float) 0;
       foreach ( $fines as $fine ) {
         $col1 = variable_get( 'sopac_payments_enable', 1 ) ? '<input type="checkbox" name="varname[]" value="' . $fine['varname'] . '">' : '';
+        $col1 = '';
         $rows[] = array(
           $col1,
           '$' . number_format( $fine['amount'], 2 ),
@@ -1019,6 +1020,7 @@ function sopac_fines_page() {
       }
       $rows[] = array( '<strong>Total:</strong>', '$' . number_format( $fine_total, 2 ), '' );
       $submit_button = '<input type="submit" value="' . t( 'Pay Selected Charges' ) . '">';
+      $submit_button = 'Payment temporarily disabled.';
       if ( variable_get( 'sopac_payments_enable', 1 ) ) {
         $rows[] = array( 'data' => array( array( 'data' => $submit_button, 'colspan' => 3 ) ), 'class' => 'profile_button' );
       }

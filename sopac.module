@@ -266,7 +266,9 @@ function sopac_menu() {
       'type' => MENU_DEFAULT_LOCAL_TASK,
     );
 
+
     if ( variable_get( 'sopac_payments_enable', 1 ) ) {
+    /*
       $items['user/fines/payments'] = array(
         'title' => 'List Payments',
         'page callback' => 'sopac_finespaid_page',
@@ -274,6 +276,7 @@ function sopac_menu() {
         'file' => 'sopac_user.php',
         'type' => MENU_LOCAL_TASK,
       );
+      */
 
       $items['user/fines/pay'] = array(
         'title' => 'Fines Payment',

@@ -19,7 +19,7 @@ function sopac_init() {
   if ( variable_get( 'sopac_ssl_enable', 0 ) ) {
     $protected_uri = preg_match( '/^(\/user|\/myaccount|\/login|\/imce)/', request_uri(), $debug_match );
     if ( $_SERVER['HTTPS'] && !$protected_uri ) {
-      $new_link = 'http://' . $_SERVER['HTTP_HOST'] . request_uri();
+      //$new_link = 'http://' . $_SERVER['HTTP_HOST'] . request_uri();
     }
     elseif ( !$_SERVER['HTTPS'] && $protected_uri ) {
       if ( variable_get( 'sopac_ssl_port', 443 ) != '443' ) {
@@ -27,6 +27,9 @@ function sopac_init() {
       }
       $new_link = 'https://' . $_SERVER['HTTP_HOST'] . request_uri();
     }
+
+    // Force SSL no matter what
+    $new_link = 'https://' . $_SERVER['HTTP_HOST'] . request_uri();
     if ( $new_link ) {
       header( "Location: $new_link" );
     }
@@ -250,6 +253,7 @@ function sopac_menu() {
   );
 
   if ( variable_get( 'sopac_fines_enable', 1 ) ) {
+    /*
     $items['user/fines'] = array(
       'title' => 'My Fines',
       'page callback' => 'sopac_fines_page',
@@ -257,7 +261,7 @@ function sopac_menu() {
       'file' => 'sopac_user.php',
       'type' => MENU_NORMAL_ITEM,
     );
-
+    */
     $items['user/fines/list'] = array(
       'title' => 'List Fines',
       'access arguments' => array( 'access user pages' ),
@@ -855,14 +859,14 @@ function sopac_user_profile_form_validate( &$form, &$form_state ) {
 
   $locum = sopac_get_locum();
 
-  $ils_hist_enabled = $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'status' );
+  $ils_hist_enabled = $cardnum ? $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'status' ) : FALSE;
   if ( $cohist_enabled ) {
-    if (!$ils_hist_enabled) {
+    if (!$ils_hist_enabled && $cardnum) {
       $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'on' );
     }
   }
   else {
-    if ($ils_hist_enabled) {
+    if ($ils_hist_enabled && $cardnum) {
       $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'off' );
     }
   }

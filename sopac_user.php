@@ -164,16 +164,16 @@ function sopac_user_info_table( &$account, &$locum ) {
       // Checkout history, if it's turned on
       if ( variable_get( 'sopac_checkout_history_enable', 0 ) ) {
         $cohist_enabled = $account->profile_pref_cohist ? 'Enabled' : 'Disabled';
-        $ils_hist_enabled = $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'status' );
+        if ($cardnum) { $ils_hist_enabled = $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'status' ); }
         if ( $cohist_enabled == 'Enabled' ) {
           // TODO Check ILS, enable it if it's not (w/ cache check)
-          if (!$ils_hist_enabled) {
+          if (!$ils_hist_enabled && $cardnum) {
             $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'on' );
           }
           // Grab + update newest checkouts if not checked in 24 hours.
         }
         else {
-          if ($ils_hist_enabled) {
+          if ($ils_hist_enabled && $cardnum) {
             $locum->set_patron_checkout_history( $cardnum, $locum_pass, 'off' );
           }
         }
@@ -183,7 +183,7 @@ function sopac_user_info_table( &$account, &$locum ) {
         $rows[] = array( array( 'data' => t( 'Items Checked Out' ), 'class' => 'attr_name' ), $userinfo['checkouts'] );
       }
       if ( variable_get( 'sopac_fines_display', 1 ) && variable_get( 'sopac_fines_enable', 1 ) ) {
-        $amount_link = l( '$' . number_format( $userinfo['balance'], 2, '.', '' ), 'user/fines' );
+        $amount_link = l( '$' . number_format( $userinfo['balance'], 2, '.', '' ), 'https://payments.darienlibrary.org/eCommerceWebModule/Home' );
         $rows[] = array( array( 'data' => t( 'Fine Balance' ), 'class' => 'attr_name' ), $amount_link );
       }
       if ( variable_get( 'sopac_cardexp_enable', 1 ) ) {
